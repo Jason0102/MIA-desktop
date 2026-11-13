@@ -1,0 +1,184 @@
+[
+  {
+    "file": "speech-atlas-1.png",
+    "columns": 4,
+    "rows": 3,
+    "tags": [
+      "happy",
+      "excited",
+      "playful",
+      "amazed",
+      "powerful",
+      "proud"
+    ],
+    "xBounds": [
+      0,
+      267,
+      523,
+      777,
+      1044
+    ],
+    "yBounds": [
+      0,
+      480,
+      982,
+      1507
+    ]
+  },
+  {
+    "file": "speech-atlas-2.png",
+    "columns": 3,
+    "rows": 4,
+    "tags": [
+      "optimistic",
+      "startled",
+      "angry",
+      "mad",
+      "aggressive",
+      "bitter"
+    ],
+    "xBounds": [
+      0,
+      351,
+      692,
+      1044
+    ],
+    "yBounds": [
+      0,
+      370,
+      747,
+      1125,
+      1507
+    ]
+  },
+  {
+    "file": "speech-atlas-3.png",
+    "columns": 3,
+    "rows": 4,
+    "tags": [
+      "critical",
+      "repelled",
+      "anxious",
+      "stressed",
+      "scared",
+      "threatened"
+    ],
+    "xBounds": [
+      0,
+      348,
+      695,
+      1044
+    ],
+    "yBounds": [
+      0,
+      374,
+      751,
+      1128,
+      1507
+    ]
+  },
+  {
+    "file": "speech-atlas-4.png",
+    "columns": 4,
+    "rows": 3,
+    "tags": [
+      "vulnerable",
+      "confused",
+      "busy",
+      "tired",
+      "bored",
+      "distant"
+    ],
+    "xBounds": [
+      0,
+      268,
+      522,
+      776,
+      1044
+    ],
+    "yBounds": [
+      0,
+      489,
+      992,
+      1507
+    ]
+  },
+  {
+    "file": "speech-atlas-5.png",
+    "columns": 4,
+    "rows": 3,
+    "tags": [
+      "despair",
+      "let down",
+      "sad",
+      "peaceful",
+      "content",
+      "curious"
+    ],
+    "xBounds": [
+      0,
+      276,
+      525,
+      773,
+      1044
+    ],
+    "yBounds": [
+      0,
+      463,
+      965,
+      1507
+    ]
+  },
+  {
+    "file": "speech-atlas-6.png",
+    "columns": 4,
+    "rows": 3,
+    "tags": [
+      "thoughtful",
+      "trusting",
+      "sympathetic",
+      "whispers",
+      "softly",
+      "quietly"
+    ],
+    "xBounds": [
+      0,
+      272,
+      524,
+      777,
+      1044
+    ],
+    "yBounds": [
+      0,
+      481,
+      985,
+      1507
+    ]
+  },
+  {
+    "file": "speech-atlas-7.png",
+    "columns": 4,
+    "rows": 3,
+    "tags": [
+      "shouts",
+      "laughs",
+      "sighs",
+      "gasps",
+      "clears throat",
+      "crying"
+    ],
+    "xBounds": [
+      0,
+      278,
+      527,
+      776,
+      1044
+    ],
+    "yBounds": [
+      0,
+      489,
+      993,
+      1506
+    ]
+  }
+]

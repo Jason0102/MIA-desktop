@@ -1,0 +1,25 @@
+<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>米亞 3.1 · 全動畫審核</title>
+<link rel="stylesheet" href="preview.css"><main>
+<header><div><p class="eyebrow">MIA · 動畫設計審核</p><h1>每個小動作，都有出場時機。</h1><p>八種分時段陪伴動作，保留原有原地動畫。閱讀使用褐色書皮；畫板朝向米亞，眼睛採柔和圓潤造型。</p></div><a class="button" href="#flow">查看狀態機流程圖 ↓</a></header>
+<div class="layout"><aside><label>篩選 <select id="filter"><option>全部</option><option>時段陪伴</option><option>原地</option><option>移動</option><option>視窗</option><option>玩球</option><option>互動</option><option>對話</option><option>備援</option></select></label><p id="count"></p><nav id="list" aria-label="動畫清單"></nav></aside>
+<section class="review"><div class="heading"><div><span id="category" class="tag"></span><h2 id="title"></h2></div><span id="resolution"></span></div><p id="description"></p>
+<div id="stage" class="stage"><div><canvas id="main" width="768" height="832"></canvas><small>選取動畫</small></div><div id="reference"><img src="../hd-preview-v2/frames/idle-0.png" alt="核准待機素材"><small>既有待機 · 膚色與尾紋對照</small></div></div>
+<div class="controls"><button id="play">暫停</button><button id="mirror">鏡像：關</button><label>速度 <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option></select></label><label>大小 <input id="size" type="range" min="192" max="480" step="24" value="288"></label><label><input type="checkbox" id="compare" checked>對照</label><button id="background">深色背景</button></div>
+<label class="scrub">逐格 <input id="frame" type="range" min="0" max="0" value="0"><output id="frameLabel"></output></label><div id="thumbs" class="thumbs"></div>
+<p class="note">原地新動作為兩格關鍵姿勢，搭配呼吸與微幅傾斜；單格動作在程式中另有動態效果。此頁展示素材與原地動作節奏，不模擬完整球體或視窗物理。尾巴應為深灰底、黑色尾尖加兩節黑紋。</p>
+</section></div>
+<section id="flow"><div class="heading"><h2>狀態機流程圖</h2><a href="../v36-preview/state-machine.svg" target="_blank">獨立開啟／放大 ↗</a></div><p>互動與物理優先。地面陪伴 → 啟動或互動後等待至少 20 秒 → 每 15–25 秒以 70% 機率嘗試時段動作 → 持續 35–90 秒 → 回到原地陪伴，間隔 30–50 秒再嘗試。跨時段立即結束。下圖保留探索與玩球流程。</p><object data="../v36-preview/state-machine.svg" type="image/svg+xml" aria-label="米亞動畫狀態機流程圖"></object></section>
+<footer><a href="catalog.json">完整動畫與觸發說明</a><p>3.1：40 組、124 格。每組可播放、暫停、逐格，並與舊版膚色及尾紋對照。</p></footer>
+</main><script src="catalog.js"></script><script src="preview.js"></script>
+<script>
+const voiceButton=document.createElement('button');
+voiceButton.textContent='米亞語音試聽';
+voiceButton.onclick=()=>{
+ if(parent!==window)parent.postMessage('mia-preview-default','*');
+ else location.href='../../情緒動畫預覽.html#EMO-000';
+};
+document.querySelector('.controls').append(voiceButton);
+function updateVoiceButton(){voiceButton.hidden=selected.id!=='speaking'}
+new MutationObserver(updateVoiceButton).observe(document.getElementById('title'),{childList:true});
+updateVoiceButton();
+</script></html>

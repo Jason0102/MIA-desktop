@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1540" viewBox="0 0 1600 1540">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#91adb9"/></marker></defs>
+<rect width="1600" height="1540" rx="24" fill="#19262e"/>
+<style>text{font-family:'Microsoft JhengHei',sans-serif;fill:#e8f0ee} .title{font-size:25px;font-weight:bold}.body{font-size:19px}.label{font-size:17px;fill:#c3d2d8}.edge{fill:none;stroke:#91adb9;stroke-width:2.5;marker-end:url(#arrow)}</style>
+<text x="40" y="48" class="title">米亞 v3.7 · 動畫狀態機</text><text x="40" y="80" class="label">線條表示主要轉移；使用者互動優先，結束後回到選定模式。框內列出實際參與的動畫。</text>
+<path class="edge" d="M575 140H265V230"/>
+<text class="label" x="305" y="130">選陪伴</text>
+<path class="edge" d="M800 180V230"/>
+<path class="edge" d="M1025 300H1110"/>
+<text class="label" x="1030" y="213">靠近可達窗邊</text>
+<path class="edge" d="M265 370V460"/>
+<text class="label" x="50" y="420">每隔 8–18 秒，選擇不同動作</text>
+<path class="edge" d="M40 570H18V300H40"/>
+<path class="edge" d="M800 370V460"/>
+<text class="label" x="580" y="420">走／跑每段 8–16 秒；偶爾停留</text>
+<path class="edge" d="M1025 580H1060V335H1025"/>
+<text class="label" x="865" y="708">完成後繼續</text>
+<path class="edge" d="M1335 370V460"/>
+<text class="label" x="1125" y="420">上升 → 下降 → 落地</text>
+<path class="edge" d="M1335 640V730"/>
+<text class="label" x="1125" y="690">隨機坐下 20–50 秒</text>
+<path class="edge" d="M1560 800H1580V550H1560"/>
+<path class="edge" d="M1335 880V970"/>
+<text class="label" x="1125" y="925">到期可站起／跳下</text>
+<path class="edge" d="M1560 605H1590V1020H1560"/>
+<path class="edge" d="M1335 1070V1150"/>
+<text class="label" x="1130" y="1114">落體與接觸檢查</text>
+<path class="edge" d="M490 865H535V750H1110"/>
+<text class="label" x="550" y="743">使用者放上窗沿：直接坐下</text>
+<path class="edge" d="M265 950V1008H1080V1215H1110"/>
+<text class="label" x="285" y="990">放在空中</text>
+<path class="edge" d="M800 950V1030"/>
+<text class="label" x="580" y="995">關閉／完成 → 回模式；放球則玩球</text>
+<path class="edge" d="M1025 1160H1070V1300H800V1360"/>
+<text class="label" x="815" y="1335">收球後回模式</text>
+<path class="edge" d="M1335 1280V1360"/>
+<path class="edge" d="M1025 1115H1095V550H1110"/>
+<text class="label" x="1030" y="1088">追球上窗沿</text>
+<rect x="575" y="100" width="450" height="80" rx="18" fill="#4b4635" stroke="#526b78"/>
+<text class="title" x="597" y="139">啟動／呼回 → 招呼</text>
+<rect x="40" y="230" width="450" height="140" rx="18" fill="#334b58" stroke="#526b78"/>
+<text class="title" x="62" y="269">陪伴 · 保持原地</text>
+<text class="body" x="62" y="306">待機、16 方向視線、輕微呼吸</text>
+<text class="body" x="62" y="335">不自主行走；放球仍可進入玩球</text>
+<rect x="575" y="230" width="450" height="140" rx="18" fill="#334b58" stroke="#526b78"/>
+<text class="title" x="597" y="269">探索 · 地面走動</text>
+<text class="body" x="597" y="306">優雅散步 ↔ 向左／右快跑</text>
+<text class="body" x="597" y="335">步調不頻繁改換；互動時停下</text>
+<rect x="1110" y="230" width="450" height="140" rx="18" fill="#334b58" stroke="#526b78"/>
+<text class="title" x="1132" y="269">跳上視窗</text>
+<text class="body" x="1132" y="306">向上跳躍 → 下落 → 落地緩衝</text>
+<text class="body" x="1132" y="335">只選可達、未遮擋且有頭頂空間的窗沿</text>
+<rect x="40" y="460" width="450" height="210" rx="18" fill="#3a493d" stroke="#526b78"/>
+<text class="title" x="62" y="499">五種原地動作</text>
+<text class="body" x="62" y="536">整理耳邊頭髮 · 整理領口</text>
+<text class="body" x="62" y="565">輕搓雙手 · 掩嘴打哈欠</text>
+<text class="body" x="62" y="594">抱臂輕點頭；不立即重複</text>
+<text class="body" x="62" y="623">陪伴約 90 秒無互動另可伸展</text>
+<rect x="575" y="460" width="450" height="210" rx="18" fill="#3a493d" stroke="#526b78"/>
+<text class="title" x="597" y="499">探索 · 短暫停留</text>
+<text class="body" x="597" y="536">原地動作約 3.2–5 秒後繼續探索</text>
+<text class="body" x="597" y="565">游標靠近：45% 機率停下看游標</text>
+<text class="body" x="597" y="594">游標離開：立即恢復散步／跑步</text>
+<text class="body" x="597" y="623">同次靠近判定一次；冷卻 8 秒</text>
+<rect x="1110" y="460" width="450" height="180" rx="18" fill="#334b58" stroke="#526b78"/>
+<text class="title" x="1132" y="499">沿窗走動</text>
+<text class="body" x="1132" y="536">散步／快跑，腳底貼齊窗沿</text>
+<text class="body" x="1132" y="565">跟隨視窗位置，遇遮擋回頭</text>
+<text class="body" x="1132" y="594">走到邊緣：回頭／坐下／跳下</text>
+<rect x="1110" y="730" width="450" height="150" rx="18" fill="#4b4635" stroke="#526b78"/>
+<text class="title" x="1132" y="769">窗沿坐下</text>
+<text class="body" x="1132" y="806">使用者拖放上去：立即坐下</text>
+<text class="body" x="1132" y="835">探索最多 60 秒；陪伴持續坐著</text>
+<text class="body" x="1132" y="864">暫停／互動優先，解除後處理到期</text>
+<rect x="1110" y="970" width="450" height="100" rx="18" fill="#334b58" stroke="#526b78"/>
+<text class="title" x="1132" y="1009">主動跳下</text>
+<text class="body" x="1132" y="1046">小跳起身 → 下落，暫時不再吸附</text>
+<rect x="1110" y="1150" width="450" height="130" rx="18" fill="#334b58" stroke="#526b78"/>
+<text class="title" x="1132" y="1189">掉落與落地</text>
+<text class="body" x="1132" y="1226">下落 → 落地緩衝 → 回到模式</text>
+<text class="body" x="1132" y="1255">關窗／最大化／頂到螢幕／劇烈晃動</text>
+<rect x="40" y="780" width="450" height="170" rx="18" fill="#4c3f43" stroke="#526b78"/>
+<text class="title" x="62" y="819">拖曳／觸摸 · 優先</text>
+<text class="body" x="62" y="856">拖曳：被提起 → 放開</text>
+<text class="body" x="62" y="885">窗沿坐下 或 下落 → 落地</text>
+<text class="body" x="62" y="914">摸頭：摸頭反應；點身體：開心</text>
+<rect x="575" y="780" width="450" height="170" rx="18" fill="#4c3f43" stroke="#526b78"/>
+<text class="title" x="597" y="819">對話／設定 · 暫時陪伴</text>
+<text class="body" x="597" y="856">傾聽／等待 → 思考 → 說話</text>
+<text class="body" x="597" y="885">說話手勢與傾聽間歇交替</text>
+<text class="body" x="597" y="914">錯誤 → 困惑；不插入完成舉牌</text>
+<text class="body" x="597" y="943">收起後恢復預設模式；設定自動套用</text>
+<rect x="40" y="1060" width="985" height="200" rx="18" fill="#3c4057" stroke="#526b78"/>
+<text class="title" x="62" y="1099">玩球 · 兩種模式都可進入</text>
+<text class="body" x="62" y="1136">追球：散步／快跑 → 踢球、試探輕撥、蹲伏撲球</text>
+<text class="body" x="62" y="1165">窗頂接球 65% 機率滾動 → 跳上追球／抱球走動／拋高或往下丟</text>
+<text class="body" x="62" y="1194">下降中的球觸及頭頂 → 頭頂球 → 繼續追球</text>
+<text class="body" x="62" y="1223">球滾出邊緣 → 跳下追球；視窗移動跟隨，關窗／最大化則掉落</text>
+<rect x="40" y="1360" width="1520" height="145" rx="18" fill="#334b58" stroke="#526b78"/>
+<text class="title" x="62" y="1399">恢復目前模式</text>
+<text class="body" x="62" y="1436">優先順序：拖曳／空中物理 → 坐下定位 → 落地／觸摸 → 說話／玩球／思考 → 傾聽 → 原地動作／移動／待機。</text>
+<text class="body" x="62" y="1465">原始空中動作保留作素材缺失備援。素材清單另逐組列出觸發條件，包含 16 方向視線及所有球動作。</text>
+</svg>

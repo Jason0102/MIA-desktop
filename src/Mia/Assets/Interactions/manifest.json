@@ -1,0 +1,305 @@
+{
+  "version": 2,
+  "clips": [
+    {
+      "name": "perched",
+      "file": "perched.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 145,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "carried",
+      "file": "carried.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "falling",
+      "file": "falling.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "landing",
+      "file": "landing.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "petting",
+      "file": "petting.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "listening",
+      "file": "listening.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "speaking",
+      "file": "speaking.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "stretching",
+      "file": "stretching.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "kicking",
+      "file": "kicking.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "pawing",
+      "file": "pawing.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "pounce",
+      "file": "pounce.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "ball-carry",
+      "file": "ball-carry.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 2,
+      "fps": 4,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "ball-toss",
+      "file": "ball-toss.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 4,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "ball-rest",
+      "file": "ball-rest.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 4,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "headball",
+      "file": "headball.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "walking",
+      "file": "walking.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 8,
+      "fps": 6,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "ear-groom",
+      "file": "ear-groom.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 2,
+      "fps": 2,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "collar-tidy",
+      "file": "collar-tidy.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 2,
+      "fps": 2,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "hand-warm",
+      "file": "hand-warm.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 2,
+      "fps": 2,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "yawn",
+      "file": "yawn.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 2,
+      "fps": 2,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "proud-nod",
+      "file": "proud-nod.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 2,
+      "fps": 2,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "name": "jump-up",
+      "file": "jump-up.png",
+      "frameWidth": 768,
+      "frameHeight": 832,
+      "count": 1,
+      "fps": 2,
+      "anchorY": 203,
+      "groundAnchorY": 203
+    },
+    {
+      "file": "night-sleep.png",
+      "fps": 0.3,
+      "frameWidth": 768,
+      "count": 2,
+      "groundAnchorY": 203,
+      "name": "night-sleep",
+      "frameHeight": 832,
+      "anchorY": 203
+    },
+    {
+      "file": "night-doze.png",
+      "fps": 0.3,
+      "frameWidth": 768,
+      "count": 2,
+      "groundAnchorY": 203,
+      "name": "night-doze",
+      "frameHeight": 832,
+      "anchorY": 203
+    },
+    {
+      "file": "morning-coffee.png",
+      "fps": 0.3,
+      "frameWidth": 768,
+      "count": 2,
+      "groundAnchorY": 203,
+      "name": "morning-coffee",
+      "frameHeight": 832,
+      "anchorY": 203
+    },
+    {
+      "file": "morning-read.png",
+      "fps": 0.3,
+      "frameWidth": 768,
+      "count": 2,
+      "groundAnchorY": 203,
+      "name": "morning-read",
+      "frameHeight": 832,
+      "anchorY": 203
+    },
+    {
+      "file": "afternoon-tea.png",
+      "fps": 0.3,
+      "frameWidth": 768,
+      "count": 2,
+      "groundAnchorY": 203,
+      "name": "afternoon-tea",
+      "frameHeight": 832,
+      "anchorY": 203
+    },
+    {
+      "file": "afternoon-draw.png",
+      "fps": 0.3,
+      "frameWidth": 768,
+      "count": 2,
+      "groundAnchorY": 203,
+      "name": "afternoon-draw",
+      "frameHeight": 832,
+      "anchorY": 203
+    },
+    {
+      "file": "evening-squid.png",
+      "fps": 0.3,
+      "frameWidth": 768,
+      "count": 2,
+      "groundAnchorY": 203,
+      "name": "evening-squid",
+      "frameHeight": 832,
+      "anchorY": 203
+    },
+    {
+      "file": "evening-music.png",
+      "fps": 0.3,
+      "frameWidth": 768,
+      "count": 2,
+      "groundAnchorY": 203,
+      "name": "evening-music",
+      "frameHeight": 832,
+      "anchorY": 203
+    }
+  ]
+}

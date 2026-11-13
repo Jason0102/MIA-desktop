@@ -1,0 +1,6 @@
+# Copy to api_key and fill in your own keys. Never commit api_key.
+[OpenAI]
+api_key =
+
+[ElevenLabs]
+api_key =
