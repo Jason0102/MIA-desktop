@@ -1,8 +1,8 @@
-# MIA desktop · 米亞桌寵 3.1
+# MIA desktop · 米亞桌寵 3.2
 
 Windows 桌面上的貓精靈夥伴，使用 C#、.NET 8 與 WPF 製作。支援陪伴、探索窗沿、跨螢幕活動、玩球，以及可選的 AI 對話與情緒語音。
 
-**3.1 代表第三代第一個公開整理版**，整合截至 2026-11-13 的最新實作；並非回退到開發期間的舊 v3.1。`main` 與 `3.1` 分支在首次發佈時指向同一份內容，程式版本為 `3.1.0`。
+**3.2** 由公開版 `3.1` 衍生，加入本機 Hermes 主代理、Codex 工作委派及 Windows 桌面工具。Hermes 模式由專用啟動腳本提供；直接開啟 `MIA.exe` 仍可使用原有對話。安裝及驗證方式見 [3.2 整合說明](docs/HERMES.md)。
 
 ## 動畫預覽
 
@@ -41,10 +41,10 @@ Windows 桌面上的貓精靈夥伴，使用 C#、.NET 8 與 WPF 製作。支援
 
 ```powershell
 ./build.ps1 -Test
-./dist/MIA-3.1-win-x64/MIA.exe
+./dist/MIA-3.2-win-x64/MIA.exe
 ```
 
-建置會輸出自帶 .NET runtime 的 Windows x64 版本。建置後也可雙擊 `啟動米亞.vbs`，退出使用 `退出米亞.vbs`。源碼版不內附 SDK。僅執行檢查：
+建置會輸出自帶 .NET runtime 的 Windows x64 版本。Hermes 安裝與首次設定完成後可雙擊 `啟動米亞.vbs`，退出使用 `退出米亞.vbs`。源碼版不內附 SDK。僅執行檢查：
 
 ```powershell
 dotnet run --project tests/Mia.Checks.csproj -c Release

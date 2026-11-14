@@ -88,6 +88,7 @@ internal static class Program
             TestCloudAsync(scratch).GetAwaiter().GetResult();
             StreamingMemoryChecks.RunAsync().GetAwaiter().GetResult();
             ServiceChecks.RunAsync().GetAwaiter().GetResult();
+            HermesChecks.RunAsync(Check).GetAwaiter().GetResult();
             Console.WriteLine($"PASS: {passed} checks. No live API calls or desktop captures were made.");
             return 0;
         }

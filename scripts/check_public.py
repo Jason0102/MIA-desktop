@@ -18,9 +18,8 @@ assert sum(len(c['rects']) for c in catalog) == 124
 for entry in catalog:
     assert (ROOT / 'art/v39-timed' / entry['file']).resolve().is_file(), entry['id']
 
-for html in ROOT.rglob('*.html'):
-    if any(p in {'bin', 'obj', 'dist'} for p in html.parts):
-        continue
+html_files = list(ROOT.glob('*.html')) + list((ROOT / 'art').rglob('*.html'))
+for html in html_files:
     text = html.read_text('utf-8')
     for ref in re.findall(r'(?:src|href|data)=["\']([^"\']+)["\']', text):
         if ref.startswith(('#', 'https:', 'http:', 'data:')):
@@ -41,6 +40,6 @@ if (ROOT / '.git').exists():
     for name in filter(None, files):
         path = Path(name)
         assert path.name not in forbidden, name
-        assert not any(p in {'bin', 'obj', 'dist', '.tools'} or p.startswith('.test') for p in path.parts), name
+        assert not any(p in {'bin', 'obj', 'dist', '.tools', '.mia-runtime'} or p.startswith('.test') for p in path.parts), name
         assert (ROOT / name).stat().st_size < 100 * 1024 * 1024, name
 print('PASS: empty credential example, 40 animations / 124 frames, preview links, 43 audio samples, public file boundaries')

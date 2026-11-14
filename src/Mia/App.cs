@@ -22,37 +22,41 @@ public sealed class App : Application
     private SettingsWindow? _settingsWindow;
     private IntPtr _handle;
     private bool _exiting;
+    private int _exitCode;
     public bool IsExiting => _exiting;
     public PetWindow Pet { get; private set; } = null!;
     public AppSettings Settings { get; private set; } = null!;
     public AiService Ai { get; private set; } = null!;
+    public HermesService? Hermes { get; private set; }
+    public string? HermesConfigurationError { get; private set; }
     public VoiceService Voice { get; private set; } = null!;
+    private const string InstanceName = @"Local\MIA.Desktop.v3.2";
 
     [STAThread]
-    public static void Main(string[] args)
+    public static int Main(string[] args)
     {
-        if(args.Length==2 && args[0]=="--dock-fixture") { InteractionDiagnostics.RunFixture(args[1]);return; }
+        if(args.Length==2 && args[0]=="--dock-fixture") { InteractionDiagnostics.RunFixture(args[1]);return 0; }
         if(args.Contains("--exit"))
         {
-            try { using var signal=EventWaitHandle.OpenExisting(@"Local\MIA.Desktop.v3.Exit"); signal.Set(); } catch(WaitHandleCannotBeOpenedException) { }
-            return;
+            try { using var signal=EventWaitHandle.OpenExisting(InstanceName + ".Exit"); signal.Set(); } catch(WaitHandleCannotBeOpenedException) { }
+            return 0;
         }
         var app = new App { ShutdownMode=ShutdownMode.OnExplicitShutdown };
-        app.Run();
+        return app.Run();
     }
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        _mutex = new Mutex(true, @"Local\MIA.Desktop.v3", out bool first);
+        _mutex = new Mutex(true, InstanceName, out bool first);
         if (!first)
         {
-            try { using var wake=EventWaitHandle.OpenExisting(@"Local\MIA.Desktop.v3.Wake"); wake.Set(); } catch (WaitHandleCannotBeOpenedException) { }
+            try { using var wake=EventWaitHandle.OpenExisting(InstanceName + ".Wake"); wake.Set(); } catch (WaitHandleCannotBeOpenedException) { }
             Shutdown(); return;
         }
-        _wake = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\MIA.Desktop.v3.Wake");
+        _wake = new EventWaitHandle(false, EventResetMode.AutoReset, InstanceName + ".Wake");
         _wakeWait = ThreadPool.RegisterWaitForSingleObject(_wake, (_,_) => Dispatcher.BeginInvoke(new Action(Recall)), null, -1, false);
-        _exitSignal=new EventWaitHandle(false,EventResetMode.AutoReset,@"Local\MIA.Desktop.v3.Exit");
+        _exitSignal=new EventWaitHandle(false,EventResetMode.AutoReset,InstanceName + ".Exit");
         _exitWait=ThreadPool.RegisterWaitForSingleObject(_exitSignal,(_,_)=>Dispatcher.BeginInvoke(new Action(ExitApp)),null,-1,false);
         DispatcherUnhandledException += (_,a) => {
             MessageBox.Show("米亞遇到問題，請重新啟動。\n"+a.Exception.GetType().Name, "MIA", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -61,6 +65,8 @@ public sealed class App : Application
         Settings=SettingsStore.Load();
         DiscoverLocalInputs();
         Ai=new AiService(Settings); Voice=new VoiceService(Settings);
+        try { Hermes=HermesService.FromEnvironment(); }
+        catch (ArgumentException ex) { HermesConfigurationError=ex.Message; }
         Pet=new PetWindow(); MainWindow=Pet;
         Pet.SetAllowedScreens(Settings.AllowedScreenIds);
         Pet.ChatRequested += ToggleChat;
@@ -74,7 +80,7 @@ public sealed class App : Application
         _handle=new WindowInteropHelper(Pet).Handle;
         HwndSource.FromHwnd(_handle)?.AddHook(WindowHook);
         bool hotkey=RegisterHotKey(_handle,1,0x0002|0x0004|0x4000,0x4D);
-        _tray=new Forms.NotifyIcon { Icon=System.Drawing.SystemIcons.Information, Text="米亞 MIA · 桌面夥伴", Visible=true };
+        _tray=new Forms.NotifyIcon { Icon=System.Drawing.SystemIcons.Information, Text="米亞 MIA 3.2 · 桌面夥伴", Visible=true };
         var menu=new Forms.ContextMenuStrip();
         menu.Items.Add("米亞，回來！",null,(_,_)=>Dispatcher.Invoke(Recall));
         menu.Items.Add("對話",null,(_,_)=>Dispatcher.Invoke(ShowChat));
@@ -90,6 +96,8 @@ public sealed class App : Application
         if(e.Args.Contains("--settings")) ShowSettings();
         else if(e.Args.Contains("--chat")) ShowChat();
         if(e.Args.Contains("--interaction-self-test"))Dispatcher.BeginInvoke(new Action(()=>_=InteractionDiagnostics.RunAsync(this)));
+        if(Array.IndexOf(e.Args,"--hermes-self-test-file") is int hermesTest && hermesTest>=0 && hermesTest+1<e.Args.Length)
+            Dispatcher.BeginInvoke(new Action(()=>_=RunHermesCheckAsync(e.Args[hermesTest+1])));
         if(e.Args.Contains("--self-test")||e.Args.Contains("--attachment-self-test"))
         {
             var timer=new System.Windows.Threading.DispatcherTimer { Interval=TimeSpan.FromSeconds(2) };
@@ -181,13 +189,37 @@ public sealed class App : Application
         if(Settings.Muted)Voice.Stop();
         Pet.SetAllowedScreens(Settings.AllowedScreenIds);
     }
-    public void ExitApp()
+    private async Task RunHermesCheckAsync(string promptPath)
+    {
+        int exitCode=1;
+        try
+        {
+            Directory.CreateDirectory(SettingsStore.DataDirectory);
+            if(Hermes is null) throw new InvalidOperationException(HermesConfigurationError ?? "未配置 Hermes 工作模式。");
+            if(new FileInfo(promptPath).Length>32_000) throw new ArgumentException("測試訊息太長。");
+            // The same chat control and server path as a manually submitted task.
+            Settings.Muted=true;
+            ShowChat();
+            var result=await _chat!.VerifyHermesAsync(File.ReadAllText(promptPath));
+            File.WriteAllText(Path.Combine(SettingsStore.DataDirectory,"hermes-ui-check.json"),System.Text.Json.JsonSerializer.Serialize(result));
+            if(result.Success)exitCode=0;
+        }
+        catch(Exception ex) when(ex is IOException or ArgumentException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            File.WriteAllText(Path.Combine(SettingsStore.DataDirectory,"hermes-ui-check.json"),
+                System.Text.Json.JsonSerializer.Serialize(new { Success=false, Error=ChatWindow.Friendly(ex) }));
+        }
+        _exitCode=exitCode;
+        ExitApp();
+    }
+    public async void ExitApp()
     {
         if(_exiting)return; _settingsWindow?.FlushAutoSave();_exiting=true;
         CaptureService.CancelActive();
         _chat?.CancelReply(); _settingsWindow?.CancelWork(); Voice?.Stop(); Pet?.Stop();
+        if(_chat is not null && Hermes is not null) await _chat.WaitForRequestAsync();
         try { if(Settings!=null) SettingsStore.Save(Settings); } catch { }
-        Shutdown();
+        Shutdown(_exitCode);
     }
     protected override void OnExit(ExitEventArgs e)
     {
@@ -195,7 +227,7 @@ public sealed class App : Application
         _exitWait?.Unregister(null); _exitSignal?.Dispose();
         if(_handle!=IntPtr.Zero)UnregisterHotKey(_handle,1);
         if(_tray!=null) { _tray.Visible=false; _tray.ContextMenuStrip?.Dispose(); _tray.Dispose(); }
-        Voice?.Dispose(); Ai?.Dispose(); Pet?.Stop();
+        Voice?.Dispose(); Ai?.Dispose(); Hermes?.Dispose(); Pet?.Stop();
         _mutex?.Dispose(); base.OnExit(e);
     }
     private IntPtr WindowHook(IntPtr hwnd,int msg,IntPtr w,IntPtr l,ref bool handled)

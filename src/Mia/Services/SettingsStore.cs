@@ -20,7 +20,7 @@ public static class SettingsStore
     {
         string? configured = Environment.GetEnvironmentVariable("MIA_DATA_DIR");
         return string.IsNullOrWhiteSpace(configured)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MIA", "v3")
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MIA", "v3.2")
             : Path.GetFullPath(configured);
     }
 

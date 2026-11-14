@@ -10,7 +10,8 @@ public sealed record ConversationTurn(string User, string Assistant, DateTimeOff
 
 public sealed class ConversationStore
 {
-    private readonly string _file = Path.Combine(SettingsStore.DataDirectory, "conversation.jsonl");
+    private readonly string _file;
+    public ConversationStore(string fileName = "conversation.jsonl") => _file = Path.Combine(SettingsStore.DataDirectory, fileName);
     public IReadOnlyList<ConversationTurn> LoadRecent()
     {
         var recent = new Queue<ConversationTurn>();

@@ -29,7 +29,7 @@ public sealed partial class SettingsWindow : Window
 
     public SettingsWindow(App app)
     {
-        _app=app; Title="米亞 MIA · 設定與聲線"; Width=400; Height=480; MinWidth=320; MinHeight=180; Ui.Style(this);
+        _app=app; Title="米亞 MIA 3.2 · 設定與聲線"; Width=400; Height=480; MinWidth=320; MinHeight=180; Ui.Style(this);
         var panel=new StackPanel { Margin=new Thickness(16) }; Content=new ScrollViewer { Content=panel, VerticalScrollBarVisibility=ScrollBarVisibility.Auto };
         panel.Children.Add(Ui.Text("米亞 · 設定",16,Ui.Gold));
         var navigation=new WrapPanel(); panel.Children.Add(navigation);
@@ -137,7 +137,7 @@ public sealed partial class SettingsWindow : Window
         if(_mutedDirty)_app.Settings.Muted=_muted.IsChecked==true;
         if(_modeDirty)_app.Settings.Mode=(_mode.SelectedItem as ComboBoxItem)?.Tag as string??"companion";
         bool startup=_startup.IsChecked==true;
-        if(startup!=StartupRegistration.IsEnabled)StartupRegistration.Set(startup);
+        if(startup!=StartupRegistration.IsEnabled)StartupRegistration.Set(startup, _app.Hermes is not null);
         _app.Settings.StartWithWindows=startup; _app.ApplySettings(); _modeDirty=false;_mutedDirty=false;
     }
     private void ImportKeys()
@@ -193,11 +193,27 @@ public sealed partial class SettingsWindow : Window
 internal static class StartupRegistration
 {
     private const string Key=@"Software\Microsoft\Windows\CurrentVersion\Run";
-    public static bool IsEnabled { get { using var key=Registry.CurrentUser.OpenSubKey(Key); return key?.GetValue("MIA.Desktop") is string; } }
-    public static void Set(bool enabled)
+    private const string Name="MIA.Desktop.3.2";
+    public static bool IsEnabled { get { using var key=Registry.CurrentUser.OpenSubKey(Key); return key?.GetValue(Name) is string; } }
+    public static void Set(bool enabled, bool useHermes)
     {
+        if(!enabled)
+        {
+            using var existing=Registry.CurrentUser.OpenSubKey(Key,writable:true);
+            existing?.DeleteValue(Name,false);
+            return;
+        }
+
+        string command=$"\"{Environment.ProcessPath}\" --quiet";
+        if(useHermes)
+        {
+            string? launcher=Environment.GetEnvironmentVariable("MIA_START_LAUNCHER");
+            if(string.IsNullOrWhiteSpace(launcher) || !Path.IsPathFullyQualified(launcher) || !File.Exists(launcher))
+                throw new InvalidOperationException("請使用 3.2 的啟動捷徑，再啟用登入時自動啟動。");
+            string powershell=Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe");
+            command=$"\"{powershell}\" -NoProfile -WindowStyle Hidden -File \"{launcher}\"";
+        }
         using var key=Registry.CurrentUser.CreateSubKey(Key);
-        if(enabled) key.SetValue("MIA.Desktop", "\""+Environment.ProcessPath+"\" --quiet");
-        else key.DeleteValue("MIA.Desktop",false);
+        key.SetValue(Name,command);
     }
 }
