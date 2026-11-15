@@ -10,6 +10,10 @@ namespace Mia;
 internal static class FloatingSurface
 {
     private static readonly Dictionary<Window,Action<double>> scalers=new();
+    internal static void RefreshScale(Window window, double factor)
+    {
+        if(scalers.TryGetValue(window,out var apply))apply(factor);
+    }
     internal static void ApplyScale(double scale)
     {
         foreach(var apply in scalers.Values.ToArray())apply(Math.Clamp(scale,.5,3));
@@ -35,7 +39,8 @@ internal static class FloatingSurface
             Math.Clamp(y,usable.Top,usable.Bottom-h),w,h);
     }
 
-    internal static void Attach(Window window, PetWindow pet, bool wrap=true, Func<bool>? suppressEscape=null)
+    internal static void Attach(Window window, PetWindow pet, bool wrap=true, Func<bool>? suppressEscape=null,
+        Func<(double Width, double Height)>? preferredSize=null)
     {
         window.WindowStyle=WindowStyle.None;
         window.ResizeMode=ResizeMode.NoResize;
@@ -56,12 +61,13 @@ internal static class FloatingSurface
         double preferredWidth=baseWidth, minimumWidth=baseMinWidth, minimumHeight=baseMinHeight;
         void Scale(double factor)
         {
-            preferredWidth=baseWidth*factor;minimumWidth=baseMinWidth*factor;minimumHeight=baseMinHeight*factor;
+            var size=preferredSize?.Invoke() ?? (baseWidth,baseHeight);
+            preferredWidth=size.Width*factor;minimumWidth=baseMinWidth*factor;minimumHeight=baseMinHeight*factor;
             if(window.Content is FrameworkElement body)body.LayoutTransform=new ScaleTransform(factor,factor);
             window.MinWidth=Math.Min(minimumWidth,window.MaxWidth);
             window.MinHeight=Math.Min(minimumHeight,window.MaxHeight);
             window.Width=Math.Min(preferredWidth,window.MaxWidth);
-            if(double.IsFinite(baseHeight))window.Height=baseHeight*factor;
+            window.Height=double.IsFinite(size.Height) ? size.Height*factor : double.NaN;
         }
         scalers[window]=Scale;
         Scale(((App)Application.Current).Settings.UiScale);

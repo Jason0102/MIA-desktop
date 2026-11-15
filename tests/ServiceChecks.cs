@@ -79,6 +79,10 @@ public static class ServiceChecks
             // Reject before playback; no audio hardware or cloud calls are needed.
             return new HttpResponseMessage(HttpStatusCode.BadRequest);
         }));
+        settings.Muted = true;
+        await voice.SpeakAsync("停用語音生成", CancellationToken.None);
+        Check(voiceRequest is null, "Disabling voice generation skips the ElevenLabs request");
+        settings.Muted = false;
         await ExpectAsync<InvalidOperationException>(() => voice.SpeakAsync("測試語音", CancellationToken.None));
         using (var request = JsonDocument.Parse(voiceRequest!))
         {

@@ -60,11 +60,39 @@ public sealed partial class PetWindow : Window
     private DateTime nextSpeechPose;
     private bool speechGesture;
     private SpeechAnimation speechAnimation = SpeechAnimation.Default;
+    private SpeechAnimation voiceAnimation = SpeechAnimation.Default;
+    private bool voiceSpeaking;
+    private readonly Dictionary<Guid, SpeechAnimation> textReplies = new();
+    private bool processingTasks;
+    private bool WorkingInCompanion => processingTasks && mode == "companion";
+    // ACT-008 is the thinking row in the original sprite sheet. Its lifetime follows jobs, not a mood timeout.
+    public void SetTaskProcessing(bool active)
+    {
+        if (active && !processingTasks) MarkInteraction();
+        processingTasks = active;
+    }
+    internal void SetTextReply(Guid id, string? text)
+    {
+        if (text is null) textReplies.Remove(id);
+        else textReplies[id] = SpeechAnimation.Resolve(text);
+        RefreshSpeaking();
+    }
+    private void RefreshSpeaking()
+    {
+        bool active = voiceSpeaking || textReplies.Count > 0;
+        if (active && !speaking) MarkInteraction();
+        speaking = active;
+        var animation = voiceSpeaking ? voiceAnimation : textReplies.Values.LastOrDefault() ?? SpeechAnimation.Default;
+        // An untagged response still uses the authored EMO-028 atlas.
+        if (active && animation == SpeechAnimation.Default) animation = SpeechAnimation.All.First(p => p.Tag == "peaceful");
+        if (!active) animation = SpeechAnimation.Default;
+        if (speechAnimation != animation) { speechAnimation = animation; speechAnimationStarted = DateTime.UtcNow; }
+    }
     private DateTime speechAnimationStarted;
     public void SetSpeechAnimation(SpeechAnimation animation)
     {
-        speechAnimation = animation;
-        speechAnimationStarted = DateTime.UtcNow;
+        voiceAnimation = animation;
+        RefreshSpeaking();
     }
     private double speechTilt;
     private string BallPlayName=>ballPlayKind switch {1=>"試探輕撥",2=>"蹲伏撲球",3=>"拿球拋高",4=>"抱球散步",5=>"抱球喘口氣",_=>"踢球"};
@@ -142,13 +170,13 @@ public sealed partial class PetWindow : Window
     internal void CancelBallPlay(){ball?.ReleaseFromPet();kickUntil=DateTime.MinValue;}
     private void MarkInteraction(){timedCompanion.Cancel(DateTime.UtcNow);cursorAttention.Cancel(DateTime.UtcNow);ClearIdleAction(DateTime.UtcNow);interactionUntil=DateTime.UtcNow.AddSeconds(.7);headUntil=DateTime.MinValue;ball?.ReleaseFromPet();kickUntil=DateTime.MinValue;autonomous="idle";actionUntil=DateTime.MinValue;lastInteraction=DateTime.UtcNow;stretchUntil=DateTime.MinValue;}
     public void BeginListening(bool active){if(active&&!listening)MarkInteraction();listening=active;}
-    public void SetSpeaking(bool active){if(active&&!speaking){MarkInteraction();if(mood=="thinking")mood="idle";}speaking=active;if(!active)speechAnimation=SpeechAnimation.Default;}
+    public void SetSpeaking(bool active){if(active && mood=="thinking")mood="idle";voiceSpeaking=active;if(!active)voiceAnimation=SpeechAnimation.Default;RefreshSpeaking();}
     public void OpenSettings()=>SettingsRequested?.Invoke();
     public void RequestExit()=>ExitRequested?.Invoke();
     public void SetMood(string value)
     {
         if(value!="idle")MarkInteraction();
-        if(value=="speaking"){speaking=true;return;}
+        if(value=="speaking"){SetSpeaking(true);return;}
         mood=value is "thinking" or "waiting" or "happy" or "error" or "greeting"?value:"idle";
         moodUntil=DateTime.UtcNow.AddSeconds(mood is "thinking" or "waiting"?120:3);
     }
@@ -286,7 +314,7 @@ public sealed partial class PetWindow : Window
         if(FocusTimer.Completed)(focusHint??=new DockHintWindow()).Place(x+width/2,y,"專注完成 · 起身伸展，喝點水吧");
         else focusHint?.Hide();
         ball?.Tick(dt,Paused||InteractionOpen);
-        if(Paused || InteractionOpen || speaking || dragging || !grounded || (perch!=IntPtr.Zero&&perchSeated) || ball==null || ball.Held)
+        if(Paused || InteractionOpen || speaking || WorkingInCompanion || dragging || !grounded || (perch!=IntPtr.Zero&&perchSeated) || ball==null || ball.Held)
             CancelBallPlay();
         if(now<kickUntil && ballPlayKind<3 && !kickApplied && (now-kickStarted).TotalSeconds>=(ballPlayKind==2?.65:ballPlayKind==1?.3:.12))
         {
@@ -319,7 +347,7 @@ public sealed partial class PetWindow : Window
         }
         if(now>=kickUntil && ball is { PetHeld:true })ball.ReleaseFromPet();
         tickIndex++;
-        ToolTip=InteractionHints?"左鍵點頭／拖曳 · 右鍵開關橫幅 · 窗沿可坐下，快速來回晃動會掉落 · 雙擊小跳躍 · 兩種模式皆可放球 · 探索可走跑、短暫停留、跳上窗沿；探索坐下最多一分鐘":null;
+        ToolTip=InteractionHints?"左鍵點頭／拖曳 · 右鍵切換輸入橫幅、工作中心與收起 · 窗沿可坐下，快速來回晃動會掉落 · 雙擊小跳躍 · 兩種模式皆可放球 · 探索可走跑、短暫停留、跳上窗沿；探索坐下最多一分鐘":null;
         if(tickIndex%8==0)surfaces=NativeDesktop.Surfaces();
         if(Math.Abs(cursor.X-previousCursor.X)+Math.Abs(cursor.Y-previousCursor.Y)>8)gazeUntil=now.AddSeconds(.8);
         previousCursor=cursor;
@@ -364,13 +392,13 @@ public sealed partial class PetWindow : Window
             UpdatePlatformExploration(now,dt,width,height,area);
             UpdateTimedCompanion(now);
             UpdateCompanionIdle(now);
-            if(mode=="companion" && (ball==null||InteractionOpen) && timedCompanion.Current==null && now>=idleUntil && now>=kickUntil && InteractionGeometry.CanStretch((now-lastInteraction).TotalSeconds,grounded,perch!=IntPtr.Zero,Paused,
+            if(mode=="companion" && !WorkingInCompanion && (ball==null||InteractionOpen) && timedCompanion.Current==null && now>=idleUntil && now>=kickUntil && InteractionGeometry.CanStretch((now-lastInteraction).TotalSeconds,grounded,perch!=IntPtr.Zero,Paused,
                 mode,false,speaking,listening&&!InteractionOpen,mood=="idle",animations.Get("stretching")!=null))
             {
                 // This measures interaction with Mia only, not operating-system user inactivity.
                 stretchUntil=now.AddSeconds(2);lastInteraction=now;idleAction="";idleUntil=DateTime.MinValue;velocityX=0;
             }
-            if(grounded&&(perch==IntPtr.Zero||(ball!=null&&StandingOnWindow))&&BallPlayRules.ShouldMove(mode,ball!=null,Paused||InteractionOpen||speaking||listening||mood!="idle"||now<interactionUntil)&&now>=stretchUntil&&(now-pettedAt).TotalSeconds>1.5)
+            if(grounded&&(perch==IntPtr.Zero||(ball!=null&&StandingOnWindow))&&BallPlayRules.ShouldMove(mode,ball!=null,Paused||InteractionOpen||speaking||WorkingInCompanion||listening||mood!="idle"||now<interactionUntil)&&now>=stretchUntil&&(now-pettedAt).TotalSeconds>1.5)
             {
                 if(ball is {Held:false} crossScreen)
                 {
@@ -484,7 +512,8 @@ public sealed partial class PetWindow : Window
         string pose;
         if(dragging&&dragMoved)pose="carried";
         else if(!grounded&&!dragging)pose=velocityY<0?"jump-up":"falling";
-        else if(speaking && speechAnimation != SpeechAnimation.Default)pose="speaking";
+        else if(speaking)pose="speaking";
+        else if(WorkingInCompanion)pose="thinking";
         else if(perch!=IntPtr.Zero&&perchSeated)pose="perched";
         else if((now-landingAt).TotalSeconds<.4)pose="landing";
         else if((now-pettedAt).TotalSeconds<1.5)pose="petting";

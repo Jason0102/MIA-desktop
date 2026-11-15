@@ -14,7 +14,7 @@ public static class SpeechTags
         情緒取決於米亞此刻的反應：分享好消息用 happy 或 excited，慶祝成就用 proud，開玩笑用 playful，驚喜用 amazed 或 startled，真心追問用 curious，斟酌回答用 thoughtful，安心陪伴用 peaceful，感同身受用 sad 或 sympathetic。疲憊、失落、困惑、緊張、恐懼或憤怒等語氣用於上下文確實呈現這些情緒時；避免對求助者嘲諷或發怒。
         音量與表達方式依場景調整：安慰用 softly，說悄悄話用 whispers，需要呼喊才用 shouts；角色或口音僅在使用者要求或角色演出需要時使用。節奏依台詞選擇：認真說明可放慢，興奮時可加快，戲劇轉折或思考時才加 pause 或 long pause。
         人物反應須符合當下動作：真覺得好笑用 laughs，鬆一口氣或無奈用 sighs，突遇意外用 gasps；清喉嚨、哭泣等反應只在場景需要時使用。音效只在使用者要求或明確的故事演出需要時使用。
-        情緒標籤同時驅動語音與角色動畫。有情緒的每句台詞都必須在句首明確標記情緒，不能只靠文字或標點暗示。平實解說可省略標籤。自由描述或複合指示請包含最貼近的情緒英文詞，例如 [audio: sad, softly] 或 [audio: excited, speaking quickly]，讓角色能辨識表情。標籤放在受影響的台詞前，語氣轉變時可在句中加入；語音逐句生成，跨句仍需維持相同語氣時在新句開頭重加。避免堆疊互相衝突的指示。程式碼與來源不加標籤。
+        情緒標籤同時驅動語音與角色動畫，關閉語音時仍須提供。每句對使用者說的台詞都必須在句首明確標記情緒，不能只靠文字或標點暗示。平實解說使用 thoughtful 或 peaceful。自由描述或複合指示請包含最貼近的情緒英文詞，例如 [audio: sad, softly] 或 [audio: excited, speaking quickly]，讓角色能辨識表情。標籤放在受影響的台詞前，語氣轉變時可在句中加入；語音逐句生成，跨句仍需維持相同語氣時在新句開頭重加。避免堆疊互相衝突的指示。程式碼、工具參數、路徑與來源不加標籤；JSON 回應僅在給使用者的 message 字串內加標籤。
         例：[audio: proud]你真的做到了！[audio: curious]哪一步最有成就感？
         """;
     private static readonly string[] Names = { "happy", "excited", "sad", "curious", "whispers", "laughs", "sighs", "angry" };

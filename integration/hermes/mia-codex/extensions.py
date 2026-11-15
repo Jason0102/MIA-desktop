@@ -58,7 +58,9 @@ def handle_install(params, **_kwargs):
         if not home:
             return json.dumps({"status": "failed", "error": "Launch Hermes through the MIA launcher."})
         path = Path(home).resolve()
-        return json.dumps(install_diagnostic(path / "hermes-agent", path, log_dir=path / "logs"), ensure_ascii=False)
+        log_dir = Path(os.environ.get("MIA_TASK_TEMP") or path / "logs")
+        source = Path(os.environ.get("MIA_HERMES_SOURCE") or path / "hermes-agent")
+        return json.dumps(install_diagnostic(source, path, log_dir=log_dir), ensure_ascii=False)
     finally:
         INSTALL_LOCK.release()
 

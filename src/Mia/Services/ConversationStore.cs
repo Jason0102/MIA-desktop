@@ -13,21 +13,21 @@ public sealed class ConversationStore
     private readonly string _file;
     public ConversationStore(string fileName = "conversation.jsonl") => _file = Path.Combine(SettingsStore.DataDirectory, fileName);
     public IReadOnlyList<ConversationTurn> LoadRecent()
+        => ReadTurns().TakeLast(10).ToArray();
+
+    internal IEnumerable<ConversationTurn> ReadTurns()
     {
-        var recent = new Queue<ConversationTurn>();
-        if (!File.Exists(_file)) return recent.ToArray();
+        if (!File.Exists(_file)) yield break;
         foreach (string line in File.ReadLines(_file))
         {
+            ConversationTurn? turn;
             try
             {
-                var turn = JsonSerializer.Deserialize<ConversationTurn>(line);
-                if (turn is null || string.IsNullOrWhiteSpace(turn.User) || string.IsNullOrWhiteSpace(turn.Assistant)) continue;
-                recent.Enqueue(turn);
-                if (recent.Count > 10) recent.Dequeue();
+                turn = JsonSerializer.Deserialize<ConversationTurn>(line);
             }
-            catch (JsonException) { /* A torn final record must not hide earlier turns. */ }
+            catch (JsonException) { continue; } // A torn final record must not hide earlier turns.
+            if (turn is not null && !string.IsNullOrWhiteSpace(turn.User) && !string.IsNullOrWhiteSpace(turn.Assistant)) yield return turn;
         }
-        return recent.ToArray();
     }
     public void Append(string user, string assistant)
     {

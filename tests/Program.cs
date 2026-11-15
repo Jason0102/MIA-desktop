@@ -89,6 +89,7 @@ internal static class Program
             StreamingMemoryChecks.RunAsync().GetAwaiter().GetResult();
             ServiceChecks.RunAsync().GetAwaiter().GetResult();
             HermesChecks.RunAsync(Check).GetAwaiter().GetResult();
+            MemoryContinuityChecks.Run(Check);
             Console.WriteLine($"PASS: {passed} checks. No live API calls or desktop captures were made.");
             return 0;
         }

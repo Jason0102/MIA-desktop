@@ -18,6 +18,7 @@ public sealed class App : Application
     private EventWaitHandle? _exitSignal;
     private RegisteredWaitHandle? _exitWait;
     private Forms.NotifyIcon? _tray;
+    private string? _notificationTask;
     private ChatWindow? _chat;
     private SettingsWindow? _settingsWindow;
     private IntPtr _handle;
@@ -69,7 +70,7 @@ public sealed class App : Application
         catch (ArgumentException ex) { HermesConfigurationError=ex.Message; }
         Pet=new PetWindow(); MainWindow=Pet;
         Pet.SetAllowedScreens(Settings.AllowedScreenIds);
-        Pet.ChatRequested += ToggleChat;
+        Pet.ChatRequested += CycleWorkSurface;
         Pet.SettingsRequested += ShowSettings;
         Pet.ExitRequested += ExitApp;
         Pet.Show(); Pet.SetMode(Settings.Mode); Pet.InteractionHints=Settings.InteractionHints;
@@ -84,18 +85,76 @@ public sealed class App : Application
         var menu=new Forms.ContextMenuStrip();
         menu.Items.Add("米亞，回來！",null,(_,_)=>Dispatcher.Invoke(Recall));
         menu.Items.Add("對話",null,(_,_)=>Dispatcher.Invoke(ShowChat));
+        menu.Items.Add("工作中心",null,(_,_)=>Dispatcher.Invoke(ShowWorkCenter));
         menu.Items.Add("設定與聲線",null,(_,_)=>Dispatcher.Invoke(ShowSettings));
         menu.Items.Add("顯示／隱藏",null,(_,_)=>Dispatcher.Invoke(()=>{ if(Pet.IsVisible) { _chat?.Hide(); _settingsWindow?.Hide(); Pet.Hide(); } else Recall(); }));
         menu.Items.Add("暫停／繼續活動",null,(_,_)=>Dispatcher.Invoke(()=>Pet.Paused=!Pet.Paused));
-        menu.Items.Add("停止語音",null,(_,_)=>Dispatcher.Invoke(()=>{ _chat?.CancelReply(); Voice.Stop(); }));
+        menu.Items.Add("停止語音",null,(_,_)=>Dispatcher.Invoke(Voice.Stop));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出米亞",null,(_,_)=>Dispatcher.Invoke(ExitApp));
         _tray.ContextMenuStrip=menu;
         _tray.DoubleClick += (_,_)=>Dispatcher.Invoke(Recall);
+        _tray.BalloonTipClicked += (_,_)=>Dispatcher.Invoke(() =>
+        {
+            if (_notificationTask is not { } task) { ShowChat(); return; }
+            ShowWorkCenter();
+            _chat?.SelectResults(true, task);
+        });
         _tray.ShowBalloonTip(3000,"米亞已啟動",hotkey?"Ctrl + Shift + M 喚回米亞；右鍵系統匣可完整退出。":"可由系統匣喚回或退出米亞。快捷鍵已被其他程式使用。",Forms.ToolTipIcon.Info);
         if(e.Args.Contains("--settings")) ShowSettings();
+        else if(e.Args.Contains("--work-center")) ShowWorkCenter();
         else if(e.Args.Contains("--chat")) ShowChat();
         if(e.Args.Contains("--interaction-self-test"))Dispatcher.BeginInvoke(new Action(()=>_=InteractionDiagnostics.RunAsync(this)));
+        if (e.Args.Contains("--questions-self-test")) Dispatcher.BeginInvoke(new Action(async () =>
+        {
+            try
+            {
+                ShowChat();
+                var checks = await _chat!.VerifyQuestionsAsync();
+                File.WriteAllText(Path.Combine(SettingsStore.DataDirectory, "questions-check.json"), System.Text.Json.JsonSerializer.Serialize(checks));
+                if (checks.Values.Any(passed => !passed)) _exitCode = 1;
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText(Path.Combine(SettingsStore.DataDirectory, "questions-check-error.txt"), ex.ToString());
+                _exitCode = 1;
+            }
+            finally { ExitApp(); }
+        }));
+        if (e.Args.Contains("--results-self-test"))
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    ShowWorkCenter();
+                    var checks = _chat!.VerifyResultsPanel();
+                    File.WriteAllText(Path.Combine(SettingsStore.DataDirectory, "results-check.json"), System.Text.Json.JsonSerializer.Serialize(checks));
+                    if (checks.Values.Any(passed => !passed)) _exitCode = 1;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(Path.Combine(SettingsStore.DataDirectory, "results-check-error.txt"), ex.ToString());
+                    _exitCode = 1;
+                }
+                finally { ExitApp(); }
+            }));
+        if(e.Args.Contains("--reply-self-test"))Dispatcher.BeginInvoke(new Action(async () =>
+        {
+            try
+            {
+                ShowChat();
+                var checks = await _chat!.VerifyReplyPresentationAsync();
+                Directory.CreateDirectory(SettingsStore.DataDirectory);
+                File.WriteAllText(Path.Combine(SettingsStore.DataDirectory, "reply-check.json"), System.Text.Json.JsonSerializer.Serialize(checks));
+                if (checks.Values.Any(passed => !passed)) _exitCode = 1;
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText(Path.Combine(SettingsStore.DataDirectory, "reply-check-error.txt"), ex.ToString());
+                _exitCode = 1;
+            }
+            finally { ExitApp(); }
+        }));
         if(Array.IndexOf(e.Args,"--hermes-self-test-file") is int hermesTest && hermesTest>=0 && hermesTest+1<e.Args.Length)
             Dispatcher.BeginInvoke(new Action(()=>_=RunHermesCheckAsync(e.Args[hermesTest+1])));
         if(e.Args.Contains("--self-test")||e.Args.Contains("--attachment-self-test"))
@@ -150,24 +209,25 @@ public sealed class App : Application
             }
         }
     }
-    public void ToggleChat()
+    private void CycleWorkSurface()
     {
         if(_exiting)return;
-        if(_chat?.IsVisible==true || _settingsWindow?.IsVisible==true)
+        if(_chat?.IsVisible!=true) ShowChat();
+        else if(!_chat.IsWorkCenter) ShowWorkCenter();
+        else
         {
-            _chat?.Hide();
-            _settingsWindow?.Hide();
-            Pet.InteractionOpen=false;
-            return;
+            _chat.Hide();
         }
-        ShowChat();
     }
-    public void ShowChat()
+    public void ShowChat() => ShowWorkSurface(false);
+    public void ShowWorkCenter() => ShowWorkSurface(true);
+    private void ShowWorkSurface(bool workCenter)
     {
         if(_exiting)return;
         Pet.Show();
         _settingsWindow?.Hide();
         _chat ??= new ChatWindow(this);
+        _chat.SetWorkCenter(workCenter);
         _chat.Show(); _chat.WindowState=WindowState.Normal; _chat.Activate(); Pet.InteractionOpen=true;
     }
     public void ShowSettings()
@@ -178,9 +238,22 @@ public sealed class App : Application
         if(_settingsWindow==null) { _settingsWindow=new SettingsWindow(this); _settingsWindow.Closed+=(_,_)=>_settingsWindow=null; }
         _settingsWindow.Show(); _settingsWindow.Activate(); Pet.InteractionOpen=true;
     }
-    public void ChatAction(Action<ChatWindow> action)
+    internal void NotifyTaskResult(string taskTitle, bool hasResult, string? taskId = null)
     {
-        ShowChat(); if(_chat!=null)action(_chat);
+        if (_exiting || _tray is null) return;
+        _notificationTask = taskId;
+        _tray.ShowBalloonTip(5000, hasResult ? "米亞 · 任務結果已回傳" : "米亞 · 任務未完成",
+            $"「{taskTitle}」\n點此查看結果。", Forms.ToolTipIcon.Info);
+    }
+    public Task ClearHermesMemoryAsync()
+    {
+        _chat ??= new ChatWindow(this);
+        return _chat.ClearHermesMemoryAsync();
+    }
+    public void OpenExtensionTask()
+    {
+        ShowChat();
+        _chat?.DraftTask("請使用 mia_install_extension 安裝並驗證米亞內附的診斷擴充。");
     }
     public void ApplySettings()
     {
@@ -200,9 +273,19 @@ public sealed class App : Application
             // The same chat control and server path as a manually submitted task.
             Settings.Muted=true;
             ShowChat();
-            var result=await _chat!.VerifyHermesAsync(File.ReadAllText(promptPath));
-            File.WriteAllText(Path.Combine(SettingsStore.DataDirectory,"hermes-ui-check.json"),System.Text.Json.JsonSerializer.Serialize(result));
-            if(result.Success)exitCode=0;
+            if (Environment.GetEnvironmentVariable("MIA_PARALLEL_CHECK") == "1")
+            {
+                var parallelResult = await _chat!.VerifyParallelJobsAsync(File.ReadAllText(promptPath));
+                File.WriteAllText(Path.Combine(SettingsStore.DataDirectory,"parallel-ui-check.json"),
+                    System.Text.Json.JsonSerializer.Serialize(parallelResult));
+                if(parallelResult.Success) exitCode=0;
+            }
+            else
+            {
+                var result=await _chat!.VerifyHermesAsync(File.ReadAllText(promptPath));
+                File.WriteAllText(Path.Combine(SettingsStore.DataDirectory,"hermes-ui-check.json"),System.Text.Json.JsonSerializer.Serialize(result));
+                if(result.Success)exitCode=0;
+            }
         }
         catch(Exception ex) when(ex is IOException or ArgumentException or InvalidOperationException or UnauthorizedAccessException)
         {

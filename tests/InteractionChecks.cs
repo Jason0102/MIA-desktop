@@ -216,11 +216,11 @@ internal static class InteractionChecks
             pet.SetSpeaking(false);pet.SetMood("idle");Select();
             check(pet.CurrentAnimation=="listening","speech completion returns to listening while panel remains open");
             pet.SetSpeaking(true);Set("pettedAt",DateTime.UtcNow);Select();
-            check(pet.CurrentAnimation=="petting","touch interaction takes priority over speech pose");
+            check(pet.CurrentAnimation=="speaking","all speech retains EMO animation during touch interaction");
             Set("landingAt",DateTime.UtcNow);Select();
-            check(pet.CurrentAnimation=="landing","landing physically stabilizes before social interaction");
+            check(pet.CurrentAnimation=="speaking","grounded speech retains EMO animation after landing");
             Set("perch",new IntPtr(1));Select();
-            check(pet.CurrentAnimation=="perched","docked character keeps seated contact while speaking or touched");
+            check(pet.CurrentAnimation=="speaking","untagged speech also uses an EMO animation while docked");
             pet.SetSpeechAnimation(SpeechAnimation.Resolve("[audio: excited]太好了！"));
             Select();
             check(pet.CurrentAnimation=="speaking","tagged speech overrides the seated pose");
@@ -232,6 +232,23 @@ internal static class InteractionChecks
             check(pet.CurrentAnimation=="falling","falling takes priority over seated and social poses");
             Set("dragging",true);Set("dragMoved",true);Select();
             check(pet.CurrentAnimation=="carried","actual drag takes highest pose priority");
+            Baseline();pet.SetMode("companion");pet.SetTaskProcessing(true);
+            Set("moodUntil",DateTime.UtcNow.AddMinutes(-5));Select();
+            check(pet.CurrentAnimation=="thinking","active jobs keep ACT-008 beyond the mood timeout");
+            pet.SetSpeaking(true);Select();
+            check(pet.CurrentAnimation=="speaking","speech overrides active job ACT-008");
+            check(((SpeechAnimation)type.GetField("speechAnimation",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(pet)!).Tag=="peaceful","untagged speech selects authored EMO-028");
+            pet.SetSpeaking(false);Select();
+            check(pet.CurrentAnimation=="thinking","speech end restores ACT-008 while jobs remain");
+            var textId=Guid.NewGuid();
+            var textReply=type.GetMethod("SetTextReply",BindingFlags.Instance|BindingFlags.NonPublic)!;
+            textReply.Invoke(pet,new object?[]{textId,"[audio: curious]純文字回應"});Select();
+            check(pet.CurrentAnimation=="speaking","text-only response uses an EMO animation");
+            pet.SetTaskProcessing(false);Select();
+            check(pet.CurrentAnimation=="speaking","last task finishing does not interrupt text speech");
+            textReply.Invoke(pet,new object?[]{textId,null});Select();
+            check(pet.CurrentAnimation!="speaking"&&pet.CurrentAnimation!="thinking","text completion releases EMO and finished task animation");
+
             Baseline();Set("dragging",true);Select();
             check(pet.CurrentAnimation=="idle","left-button press without movement never selects carrying pose");
 

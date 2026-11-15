@@ -11,7 +11,7 @@ using Mia.Services;
 
 namespace Mia;
 
-public sealed class ChatWindow : Window
+public sealed partial class ChatWindow : Window
 {
     private readonly App _app;
     private readonly StackPanel _messages=new StackPanel();
@@ -36,9 +36,13 @@ public sealed class ChatWindow : Window
     private bool _composing, _commitPending;
     private CancellationTokenSource? _captureCancellation;
     private readonly ScrollViewer _detailScroll=new ScrollViewer { VerticalScrollBarVisibility=ScrollBarVisibility.Auto, MaxHeight=340 };
+    private readonly DockPanel _workPanel = new() { Margin = new Thickness(0, 0, 0, 10) };
+    private readonly StackPanel _activity = new();
+    private readonly StackPanel _bannerDetails = new();
+    private Border _capsule = null!;
+    internal bool IsWorkCenter { get; private set; }
     private string _lastReply="";
-    private bool _readUrls;
-    public bool HasActiveReply => _request!=null;
+    public bool HasActiveReply => _request!=null || _jobs.Count > 0 || _dispatches.Any(task => !task.IsCompleted);
 
     public ChatWindow(App app)
     {
@@ -46,28 +50,20 @@ public sealed class ChatWindow : Window
         SizeToContent=SizeToContent.Height; Ui.Style(this);
         var root=new StackPanel(); Content=root;
         var details=new StackPanel { Margin=new Thickness(14) };
-        if (app.Hermes is not null)
-        {
-            var workControls = new DockPanel { LastChildFill = true };
-            string? workspace = Environment.GetEnvironmentVariable("MIA_CODEX_WORKSPACE");
-            if (!string.IsNullOrWhiteSpace(workspace) && Path.IsPathFullyQualified(workspace))
-            {
-                var results = Ui.Button("成果資料夾", () => OpenWorkspace(workspace));
-                DockPanel.SetDock(results, Dock.Right);
-                workControls.Children.Add(results);
-            }
-            workControls.Children.Add(Ui.Text("Hermes 工作模式", 12, Ui.Gold));
-            details.Children.Add(workControls);
-        }
+        InitializeResults();
+        details.Children.Add(_workPanel);
+        _workPanel.Visibility = Visibility.Collapsed;
         _scroll.Content=_messages; _scroll.MaxHeight=170;
-        details.Children.Add(_scroll); details.Children.Add(_status);
-        details.Children.Add(_controls);
-        details.Children.Add(_previews); details.Children.Add(_attachmentLabel);
+        _bannerDetails.Children.Add(_scroll); _bannerDetails.Children.Add(_status);
+        _bannerDetails.Children.Add(_controls);
+        _bannerDetails.Children.Add(_previews); _bannerDetails.Children.Add(_attachmentLabel);
+        details.Children.Add(_bannerDetails);
         _detailScroll.Content=details; _details.Child=_detailScroll; _details.CornerRadius=new CornerRadius(16);
         _details.Background=new SolidColorBrush(Color.FromArgb(205,56,56,56));
         _details.Margin=new Thickness(0,0,0,8); root.Children.Add(_details);
         var capsule=new Border { Height=56, CornerRadius=new CornerRadius(28),
             Background=new SolidColorBrush(Color.FromArgb(170,100,100,100)), Padding=new Thickness(20,8,10,8) };
+        _capsule = capsule;
         var row=new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition());
         row.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(38) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(38) });
@@ -77,7 +73,8 @@ public sealed class ChatWindow : Window
         _stop.Visibility=Visibility.Collapsed;_stop.HorizontalAlignment=HorizontalAlignment.Center;
         _stop.Background=new SolidColorBrush(Color.FromArgb(190,65,65,65));root.Children.Add(_stop);
         var stopTimer=new System.Windows.Threading.DispatcherTimer { Interval=TimeSpan.FromMilliseconds(80) };
-        stopTimer.Tick+=(_,_)=>_stop.Visibility=(_request!=null||!_hermesRequest.IsCompleted||app.Voice.IsSpeaking)?Visibility.Visible:Visibility.Collapsed;
+        stopTimer.Tick+=(_,_)=>_stop.Visibility=(!IsWorkCenter && (HasActiveReply||app.Voice.IsSpeaking))?Visibility.Visible:Visibility.Collapsed;
+        _stop.ToolTip = "停止所有工作與語音";
         IsVisibleChanged+=(_,_)=>{if(IsVisible)stopTimer.Start();else stopTimer.Stop();};
         Closed+=(_,_)=>stopTimer.Stop();
         var inputLayer=new Grid(); row.Children.Add(inputLayer);
@@ -132,8 +129,11 @@ public sealed class ChatWindow : Window
             foreach (var turn in hermes.History)
             {
                 AddMessage("你", turn.User, false);
-                AddMessage("米亞", turn.Assistant, true);
-                _lastReply = turn.Assistant;
+                var result = _taskResults.Entries.FirstOrDefault(item => item.Reply == turn.Assistant);
+                string visible = result is null ? turn.Assistant : TaskCompletion.Display(turn.Assistant, result.Files.Length > 0);
+                var reply = AddMessage("米亞", visible, true);
+                if (result is not null && reply.Parent is StackPanel panel) panel.Children.Add(BuildResultCard(result, full: false));
+                _lastReply = visible;
             }
             _status.Text = hermes.MemoryWarning ?? "";
         }
@@ -144,15 +144,48 @@ public sealed class ChatWindow : Window
         }
         if (app.HermesConfigurationError is not null) _status.Text = app.HermesConfigurationError;
         else if (app.Hermes is null && (app.Ai.MemoryWarning != null || app.Ai.RoleWarning != null)) _status.Text = app.Ai.MemoryWarning ?? app.Ai.RoleWarning!;
-        Closing+=(_,e)=> { if(!_app.IsExiting) { e.Cancel=true; CancelReply(); Hide(); } };
+        Closing+=(_,e)=> { if(!_app.IsExiting) { e.Cancel=true; Hide(); } };
         PreviewMouseRightButtonUp+=(_,e)=>{e.Handled=true;Hide();};
         AllowDrop=true;
         DragOver+=(_,e)=>{ e.Effects=e.Data.GetDataPresent(DataFormats.FileDrop)||e.Data.GetDataPresent(DataFormats.UnicodeText)?DragDropEffects.Copy:DragDropEffects.None; e.Handled=true; };
         Drop+=OnDrop;
-        FloatingSurface.Attach(this,app.Pet,wrap:false,suppressEscape:()=>_composing||_commitPending);
-        IsVisibleChanged+=(_,_)=> { if(IsVisible)Dispatcher.BeginInvoke(new Action(()=> { if(IsVisible && !_app.IsExiting)_input.Focus(); })); else app.Pet.BeginListening(false); };
+        FloatingSurface.Attach(this,app.Pet,wrap:false,suppressEscape:()=>_composing||_commitPending,
+            preferredSize:()=> (380, double.NaN));
+        IsVisibleChanged+=(_,_)=> { if(IsVisible)Dispatcher.BeginInvoke(new Action(()=> { if(IsVisible && !IsWorkCenter && !_app.IsExiting)_input.Focus(); })); else app.Pet.BeginListening(false); };
         System.ComponentModel.DependencyPropertyDescriptor.FromProperty(MaxHeightProperty,typeof(Window))!
-            .AddValueChanged(this,(_,_)=>_detailScroll.MaxHeight=Math.Max(0,Math.Min(340,MaxHeight/_app.Settings.UiScale-64)));
+            .AddValueChanged(this,(_,_)=>UpdateWorkLayout());
+    }
+    internal void SetWorkCenter(bool enabled)
+    {
+        IsWorkCenter = enabled;
+        Title = enabled ? "米亞 MIA 3.2 · 工作中心" : "米亞 MIA 3.2 · 輸入橫幅";
+        _workPanel.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+        _bannerDetails.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+        _capsule.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+        _stop.Visibility = Visibility.Collapsed;
+        _details.Visibility = enabled || _messages.Children.Count > 0 || _attachments.Count > 0 || _status.Text.Length > 0
+            ? Visibility.Visible : Visibility.Collapsed;
+        FloatingSurface.RefreshScale(this, _app.Settings.UiScale);
+        UpdateWorkLayout();
+        if (enabled) SelectResults(false);
+        _scroll.ScrollToEnd();
+    }
+
+    private void UpdateWorkLayout()
+    {
+        _scroll.MaxHeight = IsWorkCenter ? 350 : 170;
+        double available = MaxHeight / _app.Settings.UiScale - 112;
+        _detailScroll.MaxHeight = IsWorkCenter ? double.PositiveInfinity : Math.Max(0, Math.Min(340, available));
+        _workScroll.MaxHeight = Math.Max(0, Math.Min(575, available - 44));
+    }
+
+    private void RenderActivity()
+    {
+        if (!IsWorkCenter) return;
+        _activity.Children.Clear();
+        var running = _jobs.Where(job => job.Reply is null).ToArray();
+        if (running.Length == 0) _activity.Children.Add(Ui.Text("目前沒有進行中的任務", 13, Ui.Subtle));
+        foreach (var job in running) _activity.Children.Add(job.Card);
     }
     internal static bool ShouldSubmitEnter(Key key,bool composing,bool commitPending) => key==Key.Enter && !composing && !commitPending;
     private bool OwnsRequest(CancellationTokenSource session) => ReferenceEquals(_request,session) && !session.IsCancellationRequested && !_app.IsExiting;
@@ -176,27 +209,39 @@ public sealed class ChatWindow : Window
         template.Triggers.Add(hover);button.Template=template;button.Click+=(_,_)=>action();return button;
     }
     public void Capture(bool window)=>_=CaptureAsync(window);
-    public void Replay()=>_=ReplayAsync();
     public void RemoveImage()=>ClearAttachment();
-    public async void ClearConversation()
+    internal void DraftTask(string text)
+    {
+        if (_input.Text.Length > 0)
+        {
+            _status.Text = "輸入欄已有草稿，請先傳送或清空，再開啟擴充安裝任務。";
+            return;
+        }
+        _input.Text = text;
+        _input.CaretIndex = text.Length;
+    }
+    internal async Task ClearHermesMemoryAsync()
     {
         if (_clearingConversation) return;
+        var hermes = _app.Hermes ?? throw new InvalidOperationException("請透過米亞 3.2 啟動捷徑連線至 Hermes。");
+        if (_jobs.Count > 0 || _dispatches.Any(task => !task.IsCompleted)) throw new InvalidOperationException("請先等待工作結束，或停止工作後再清除。");
         _clearingConversation = true;
         CancelReply();
         try
         {
-            if (_app.Hermes is { } hermes)
-            {
-                await _hermesRequest;
-                await hermes.ClearConversationAsync();
-            }
-            else _app.Ai.ClearHistory();
+            await hermes.ClearMemoryAsync();
+            _knownTasks.Clear();
+            SaveTaskContext();
+            _taskResults.ClearConversationText();
+            _taskResults.Save();
+            _messages.Children.Clear();
+            _lastReply = "";
+            _hermesFinalReply = null;
+            _hermesToolEvents.Clear();
+            RenderActivity();
+            _status.Text = "已清除 Hermes 記憶與對話紀錄。";
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.Net.Http.HttpRequestException or OperationCanceledException)
-        { _status.Text="無法清除對話。" + Friendly(ex); return; }
         finally { _clearingConversation = false; }
-        _messages.Children.Clear();_lastReply="";ClearAttachment();
-        _status.Text="";_details.Visibility=Visibility.Collapsed;
     }
     private TextBox AddMessage(string who,string text,bool pet)
     {
@@ -212,155 +257,68 @@ public sealed class ChatWindow : Window
     }
     private Task SendAsync()
     {
-        if (_clearingConversation || !_hermesRequest.IsCompleted) return Task.CompletedTask;
+        if (_clearingConversation) return Task.CompletedTask;
         if (_app.HermesConfigurationError is { } error)
         {
             _status.Text = error;
             return Task.CompletedTask;
         }
-        Task send = SendCoreAsync();
-        if (_app.Hermes is not null) _hermesRequest = send;
-        return send;
+        return _app.Hermes is not null ? SendJobAsync() : SendCoreAsync();
     }
 
     private async Task SendCoreAsync()
     {
         string text=_input.Text.Trim(); if(string.IsNullOrEmpty(text)||_capturing||_composing||_commitPending||_app.IsExiting)return;
         CancelReply();
-        _readUrls = Mia.Services.SpeechTags.RequestsUrls(text);
+        _hermesToolEvents.Clear();
+        RenderActivity();
         var images=_attachments.Select(a=>a.Bytes).ToArray();
         var times=string.Join("、",_attachments.Select((a,i)=>$"圖{i+1}：{a.Time:HH:mm:ss}"));
         ClearAttachment();
         var session=new CancellationTokenSource(); _request=session;
         _input.Clear(); AddMessage("你",text+(images.Length>0?$"\n〔附有 {images.Length} 張畫面 · {times}〕":""),false);
         _status.Text="米亞正在思考…"; _app.Pet.SetMood("thinking");
-        var sentences = System.Threading.Channels.Channel.CreateUnbounded<string>(new() { SingleReader = true, SingleWriter = true });
-        bool speak = !_app.Settings.Muted && !string.IsNullOrWhiteSpace(_app.Settings.VoiceId);
-        var reveals = new List<Task>();
-        var voiceBubbles = new List<TextBox>();
-        Task<string?> voice = PlayVoice();
-        var pending = new System.Text.StringBuilder();
-        var displayed = new System.Text.StringBuilder();
-        TextBox? live = null;
-        bool received = false;
+        var presentation = new ReplyPresentation(this, "米亞", session.Token, SpeechTags.RequestsUrls(text));
+        var streamed = new System.Text.StringBuilder();
         try
         {
             string prompt = text+(images.Length>0?$"\n附圖是先前選取的獨立快照，擷取時間：{times}，不代表現在的畫面。":"");
-            string reply = _app.Hermes is { } hermes
-                ? await hermes.ReplyAsync(prompt, images, session.Token, update => HandleHermesUpdateAsync(session, update, speak ? null : OnDelta))
-                : await _app.Ai.ReplyWithImagesAsync(prompt, images, session.Token, OnDelta);
-            void OnDelta(string delta)
+            string reply = await _app.Ai.ReplyWithImagesAsync(prompt, images, session.Token, delta =>
             {
                 if (!OwnsRequest(session)) return;
-                received = true;
-                if (!speak)
-                {
-                    live ??= AddMessage("米亞", "", true);
-                    displayed.Append(delta);
-                    live.Text = Mia.Services.SpeechTags.Display(displayed.ToString(), streaming: true);
-                    _scroll.ScrollToEnd();
-                    _status.Text = "米亞正在回答…";
-                    return;
-                }
-                pending.Append(delta);
-                string buffered = pending.ToString().TrimStart();
-                pending.Clear(); pending.Append(buffered);
-                var chunks = Mia.Services.VoiceService.ChunkText(buffered);
-                int consumed = 0;
-                int ready = chunks.Count - 1;
-                if (chunks.Count > 0 && ("。？！!?\n".Contains(chunks[^1][^1]) || chunks[^1].Length >= 1000)) ready++;
-                for (int i = 0; i < ready; i++)
-                {
-                    sentences.Writer.TryWrite(chunks[i]);
-                    consumed = buffered.IndexOf(chunks[i], consumed, StringComparison.Ordinal) + chunks[i].Length;
-                }
-                if (consumed > 0) pending.Remove(0, consumed);
-            }
-            if(!OwnsRequest(session)) return;
+                streamed.Append(delta);
+                presentation.Update(streamed.ToString());
+            });
+            if (!OwnsRequest(session)) return;
 
-            if (speak)
-            {
-                if (!received) sentences.Writer.TryWrite(reply.Split("\n來源：")[0]);
-                else if (pending.Length > 0) sentences.Writer.TryWrite(pending.ToString());
-            }
-            sentences.Writer.TryComplete();
-            _lastReply=reply.Split("\n來源：")[0];
-            if (!speak)
-            {
-                if (live is null) AddMessage("米亞", reply, true);
-                else
-                {
-                    live.Text = Mia.Services.SpeechTags.Display(reply);
-                    AddSourceLinks(live, reply);
-                }
-            }
-            string? voiceError = await voice;
-            await Task.WhenAll(reveals);
+            _lastReply = reply.Split("\n來源：")[0];
+            await presentation.CompleteAsync(reply, _lastReply);
             if (OwnsRequest(session))
             {
-                if (speak && (voiceError is not null || voiceBubbles.Count == 0 || _app.Settings.Muted))
-                {
-                    foreach (var bubble in voiceBubbles)
-                        if (bubble.Parent is StackPanel { Parent: Border border }) _messages.Children.Remove(border);
-                    AddMessage("米亞", reply, true);
-                }
-                else if (speak && reply.Length > _lastReply.Length)
-                    AddSourceLinks(voiceBubbles[^1], reply[_lastReply.Length..]);
-                _hermesFinalReply = _app.Hermes is not null ? reply : null;
-                _status.Text = voiceError ?? (_app.Hermes is { } activeHermes
-                    ? activeHermes.MemoryWarning ?? "Hermes 工作完成。"
-                    : _app.Ai.MemoryWarning ?? _app.Ai.RoleWarning ?? "回答完成。");
+                _status.Text = presentation.VoiceError ?? _app.Ai.MemoryWarning ?? _app.Ai.RoleWarning ?? "回答完成。";
                 _app.Pet.SetMood("idle");
             }
         }
-        catch(OperationCanceledException)
+        catch (OperationCanceledException)
         {
-            if(ReferenceEquals(_request,session) && !_app.IsExiting && _app.Hermes is null) _status.Text="已停止。";
+            if (ReferenceEquals(_request,session) && !_app.IsExiting) _status.Text = "已停止。";
             session.Cancel();
         }
-        catch(Exception ex) { if(ReferenceEquals(_request,session)) { _status.Text=Friendly(ex); _app.Pet.SetMood("error"); } session.Cancel(); }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(_request,session)) { _status.Text = Friendly(ex); _app.Pet.SetMood("error"); }
+            session.Cancel();
+        }
         finally
         {
-            sentences.Writer.TryComplete();
-            await voice;
-            await Task.WhenAll(reveals);
-            if(ReferenceEquals(_request,session))
+            await presentation.AbortAsync();
+            if (ReferenceEquals(_request,session))
             {
-                _request=null;
+                _request = null;
                 _pendingControls.Clear(); _controls.Children.Clear();
-                if(session.IsCancellationRequested)_app.Pet.SetMood("idle");
+                if (session.IsCancellationRequested) _app.Pet.SetMood("idle");
             }
             session.Dispose();
-        }
-        async Task<string?> PlayVoice()
-        {
-            if (!speak) return null;
-            try { await _app.Voice.SpeakStreamAsync(sentences.Reader, session.Token, segment => reveals.Add(RevealSegmentAsync(segment)), _readUrls); return null; }
-            catch (OperationCanceledException) when (session.IsCancellationRequested) { return null; }
-            catch (Exception ex) { return "文字回答完成；" + Friendly(ex); }
-        }
-        async Task RevealSegmentAsync(string segment)
-        {
-            if (!OwnsRequest(session)) return;
-            string display = Mia.Services.SpeechTags.Display(segment);
-            if (string.IsNullOrWhiteSpace(display)) return;
-            _status.Text = "正在播放語音…";
-            var body = AddMessage("米亞", "", true);
-            voiceBubbles.Add(body);
-            int[] starts = System.Globalization.StringInfo.ParseCombiningCharacters(display);
-            try
-            {
-                for (int count = 1; ; count = Math.Min(count + 3, starts.Length))
-                {
-                    if (!OwnsRequest(session)) return;
-                    body.Text = count == starts.Length ? display : display[..starts[count]];
-                    _scroll.ScrollToEnd();
-                    if (count == starts.Length) break;
-                    await Task.Delay(30, session.Token);
-                }
-                AddSourceLinks(body, display);
-            }
-            catch (OperationCanceledException) when (session.IsCancellationRequested) { }
         }
     }
     private Task HandleHermesUpdateAsync(CancellationTokenSource session, HermesUpdate update, Action<string>? onDelta)
@@ -376,6 +334,7 @@ public sealed class ChatWindow : Window
             case "tool.started" or "tool.completed" or "tool.failed":
                 if (update.Tool.Length == 0) break;
                 if (_hermesToolEvents.Count < 300) _hermesToolEvents.Add(update.Event + " " + update.Tool);
+                RenderActivity();
                 _status.Text = update.Event switch
                 {
                     "tool.started" => $"Hermes 正在使用 {update.Tool}…",
@@ -440,18 +399,7 @@ public sealed class ChatWindow : Window
         }
     }
 
-    private void OpenWorkspace(string workspace)
-    {
-        try
-        {
-            var jobs = Path.Combine(workspace, "jobs");
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Directory.Exists(jobs) ? jobs : workspace) { UseShellExecute = true });
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or ArgumentException)
-        { _status.Text = "無法開啟 Codex 成果資料夾。"; }
-    }
-
-    internal Task WaitForRequestAsync() => _hermesRequest;
+    internal Task WaitForRequestAsync() => Task.WhenAll(_jobs.Select(job => job.Execution).Concat(_dispatches).ToArray());
     internal async Task<HermesUiCheck> VerifyHermesAsync(string prompt)
     {
         _hermesToolEvents.Clear();
@@ -483,6 +431,10 @@ public sealed class ChatWindow : Window
     }
     public void CancelReply()
     {
+        foreach (var job in _jobs.ToArray()) StopJob(job);
+        _routingCancellation.Cancel();
+        _routingCancellation.Dispose();
+        _routingCancellation = new();
         if (_app.Hermes is not null && !_hermesRequest.IsCompleted && _request is { } running)
         {
             running.Cancel(); _app.Voice.Stop();
@@ -493,20 +445,12 @@ public sealed class ChatWindow : Window
         previous?.Cancel(); _captureCancellation?.Cancel(); _app.Voice.Stop();
         if(!_app.IsExiting) { _status.Text="已停止。"; _app.Pet.SetMood("idle"); }
     }
-    private async Task ReplayAsync()
-    {
-        if(string.IsNullOrWhiteSpace(_lastReply)||_capturing||_app.IsExiting||!_hermesRequest.IsCompleted)return;
-        CancelReply(); var session=new CancellationTokenSource(); _request=session;
-        try { _status.Text="正在重播…"; await _app.Voice.SpeakAsync(_lastReply,session.Token, readUrls: _readUrls); if(OwnsRequest(session))_status.Text="播放結束。"; }
-        catch(OperationCanceledException) { }
-        catch(Exception ex) { if(ReferenceEquals(_request,session))_status.Text=Friendly(ex); }
-        finally { if(ReferenceEquals(_request,session))_request=null; session.Dispose(); }
-    }
     private async Task CaptureAsync(bool window)
     {
-        if(_capturing||_app.IsExiting||!_hermesRequest.IsCompleted)return;
+        if(_capturing||_app.IsExiting)return;
         if(_attachments.Count>=6){_status.Text="一次最多六張附圖，請先移除或傳送。";return;}
-        CancelReply(); _capturing=true;
+        if (_app.Hermes is null) CancelReply();
+        _capturing=true;
         bool visible=_app.Pet.IsVisible;
         using var session=new CancellationTokenSource(); _captureCancellation=session;
         try
@@ -578,6 +522,16 @@ public sealed class ChatWindow : Window
                 if(files.Length+_attachments.Count>6)throw new InvalidOperationException("一次最多六張附圖。");
                 foreach(string path in files)
                 {
+                    if (_app.Hermes is not null)
+                    {
+                        var file = new FileInfo(path);
+                        if (!Path.GetPathRoot(file.FullName)!.Equals(@"C:\", StringComparison.OrdinalIgnoreCase) ||
+                            (file.Attributes & FileAttributes.ReparsePoint) != 0)
+                            throw new InvalidOperationException("Hermes 附圖必須來自 C 槽的實際檔案。");
+                        for (var folder = file.Directory; folder is not null; folder = folder.Parent)
+                            if ((folder.Attributes & FileAttributes.ReparsePoint) != 0)
+                                throw new InvalidOperationException("Hermes 附圖不可來自重新導向的資料夾。");
+                    }
                 string ext=Path.GetExtension(path).ToLowerInvariant();
                 if(ext is not (".png" or ".jpg" or ".jpeg"))throw new InvalidOperationException("請拖入 PNG 或 JPG 圖片。");
                 if(new FileInfo(path).Length>10*1024*1024)throw new InvalidOperationException("請使用小於 10 MB 的圖片。");

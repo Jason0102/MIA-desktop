@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -309,7 +310,14 @@ internal static class InteractionDiagnostics
             }
             var settingsControls=Descendants(settingsPanel).ToArray();
             var buttonLabels=settingsControls.OfType<Button>().Select(b=>b.Content as string).ToHashSet();
-            checks["settings_removes_redundant_buttons"]=!new[]{"停靠視窗","框選畫面","儲存設定","關閉","返回對話","收起"}.Any(buttonLabels.Contains);
+            checks["settings_removes_redundant_buttons"]=!new[]{"停靠視窗","框選畫面","儲存設定","關閉","返回對話","收起","重播語音"}.Any(buttonLabels.Contains);
+            var voiceGeneration = settingsControls.OfType<CheckBox>().Single(box => (string?)box.Content == "語音生成（ElevenLabs）");
+            bool initialVoiceGeneration = voiceGeneration.IsChecked == true;
+            voiceGeneration.IsChecked = false;
+            bool disabledPersisted = app.Settings.Muted && SettingsStore.Load().Muted;
+            voiceGeneration.IsChecked = true;
+            checks["voice_generation_switch_persists"] = disabledPersisted && !app.Settings.Muted && !SettingsStore.Load().Muted;
+            voiceGeneration.IsChecked = initialVoiceGeneration;
             modeCombo.SelectedIndex=1;
             checks["default_mode_autosaves_while_temporarily_companion"]=app.Settings.Mode=="explore"&&app.Pet.EffectiveMode=="companion"&&SettingsStore.Load().Mode=="explore";
             var scales=settingsControls.OfType<Slider>().ToArray();double previousScale=app.Settings.PetScale;
@@ -328,6 +336,14 @@ internal static class InteractionDiagnostics
             var banner=Application.Current.Windows.OfType<ChatWindow>().First(w=>w.IsVisible);
             banner.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,Environment.TickCount,System.Windows.Input.MouseButton.Right){RoutedEvent=UIElement.PreviewMouseRightButtonUpEvent});
             checks["right_click_banner_hides_and_restores_default"]=!banner.IsVisible&&app.Pet.EffectiveMode=="explore";
+            void RightClickPet() => app.Pet.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right)
+                { RoutedEvent = UIElement.MouseRightButtonUpEvent });
+            RightClickPet();
+            bool opensBanner = banner.IsVisible && !banner.IsWorkCenter;
+            RightClickPet();
+            bool opensWorkCenter = banner.IsVisible && banner.IsWorkCenter;
+            RightClickPet();
+            checks["right_click_pet_cycles_all_three_surfaces"] = opensBanner && opensWorkCenter && !banner.IsVisible;
             var detected=app.Pet.DetectedScreens.ToArray();
             checks["screen_detection_returns_unique_ids"]=detected.Length==NativeDesktop.WorkAreas().Count&&detected.Select(s=>s.Id).Distinct().Count()==detected.Length&&detected.All(s=>!string.IsNullOrWhiteSpace(s.Id));
             app.Pet.Paused=true;

@@ -14,9 +14,9 @@ public sealed partial class PetWindow
     private bool perchSeated=true,autonomousJump;
     private DateTime seatUntil,platformDecisionAt,nextWindowJump;
     private IntPtr jumpTarget;
-    private double PerchAnchor(double height)=>perchSeated && !(speaking && speechAnimation != SpeechAnimation.Default)?SeatAnchor(height):GroundAnchor(height);
+    private double PerchAnchor(double height)=>perchSeated && !speaking && !WorkingInCompanion?SeatAnchor(height):GroundAnchor(height);
     // Focus in the open banner permits stationary company, while movement and timed activities stay blocked.
-    private bool FreeForCompanionIdle(DateTime now)=>!Paused&&!speaking&&(!listening||InteractionOpen)&&!dragging&&mood=="idle"&&now>=interactionUntil&&(now-pettedAt).TotalSeconds>1.5;
+    private bool FreeForCompanionIdle(DateTime now)=>!Paused&&!speaking&&!WorkingInCompanion&&(!listening||InteractionOpen)&&!dragging&&mood=="idle"&&now>=interactionUntil&&(now-pettedAt).TotalSeconds>1.5;
     private bool FreeForAutonomy(DateTime now)=>!InteractionOpen&&!listening&&FreeForCompanionIdle(now);
 
     private void UpdateCursorAttention(DateTime now,NativeDesktop.Point cursor,double width,double height)

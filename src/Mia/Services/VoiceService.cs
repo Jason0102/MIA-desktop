@@ -96,7 +96,21 @@ public sealed class VoiceService : IDisposable
                         // At most one upcoming sentence is generated while the current one plays.
                         if(i+1<chunks.Length)pending=GenerateFileAsync(SpeechTags.SpokenText(chunks[i+1], readUrls),session.Token);
                         _playbackAnimation = SpeechAnimation.Resolve(SpeechTags.SpokenText(chunks[i], readUrls));
-                        await _playback(file,session.Token);
+                        // The injected file player follows the same start/end contract as PCM playback.
+                        SpeechAnimationChanged?.Invoke(_playbackAnimation);
+                        IsSpeaking = true;
+                        SpeakingChanged?.Invoke(true);
+                        try
+                        {
+                            segmentStarted?.Invoke(chunks[i]);
+                            await _playback(file,session.Token);
+                        }
+                        finally
+                        {
+                            IsSpeaking = false;
+                            SpeakingChanged?.Invoke(false);
+                            SpeechAnimationChanged?.Invoke(SpeechAnimation.Default);
+                        }
                     }
                     finally { TryDelete(file); }
                 }
@@ -141,19 +155,26 @@ public sealed class VoiceService : IDisposable
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         try
         {
-            await PcmStreamPlayer.PlayAsync(stream, () => _dispatcher.BeginInvoke(new Action(() =>
+            await PcmStreamPlayer.PlayAsync(stream, () => OnDispatcherAsync(() =>
             {
                 if (ct.IsCancellationRequested) return;
-                started();
                 SpeechAnimationChanged?.Invoke(SpeechAnimation.Resolve(text));
                 IsSpeaking = true;
                 SpeakingChanged?.Invoke(true);
-            })), ct);
+                started();
+            }), ct);
         }
         finally
         {
-            await _dispatcher.InvokeAsync(() => { IsSpeaking = false; SpeakingChanged?.Invoke(false); SpeechAnimationChanged?.Invoke(SpeechAnimation.Default); });
+            await OnDispatcherAsync(() => { IsSpeaking = false; SpeakingChanged?.Invoke(false); SpeechAnimationChanged?.Invoke(SpeechAnimation.Default); });
         }
+    }
+
+    private Task OnDispatcherAsync(Action action)
+    {
+        if (!_dispatcher.CheckAccess()) return _dispatcher.InvokeAsync(action, DispatcherPriority.Send).Task;
+        action();
+        return Task.CompletedTask;
     }
 
     private async Task<string> GenerateFileAsync(string chunk,CancellationToken ct)

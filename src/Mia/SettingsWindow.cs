@@ -18,13 +18,13 @@ public sealed partial class SettingsWindow : Window
     private readonly PasswordBox _eleven=new PasswordBox();
     private readonly TextBox _voice;
     private readonly TextBox _materials;
-    private readonly CheckBox _muted=new CheckBox { Content="靜音（保留文字回答）" };
+    private readonly CheckBox _voiceGeneration=new CheckBox { Content="語音生成（ElevenLabs）" };
     private readonly CheckBox _startup=new CheckBox { Content="登入 Windows 後自動啟動米亞（安靜啟動）" };
     private readonly ComboBox _mode=new ComboBox();
     private readonly TextBlock _status=Ui.Text("金鑰以 Windows 使用者加密保護，不寫入發布包。",12,Ui.Subtle);
     private CancellationTokenSource? _work;
     private readonly Button _clone;
-    private bool _modeDirty, _mutedDirty, _syncing, _closed, _pendingSave;
+    private bool _modeDirty, _voiceGenerationDirty, _syncing, _closed, _pendingSave;
     private readonly System.Windows.Threading.DispatcherTimer _autoSave=new() {Interval=TimeSpan.FromMilliseconds(600)};
 
     public SettingsWindow(App app)
@@ -36,13 +36,6 @@ public sealed partial class SettingsWindow : Window
         navigation.Children.Add(Ui.Button("退出米亞",()=>{FlushAutoSave();app.ExitApp();}));
         navigation.Children.Add(Ui.Button("暫停／繼續",()=>app.Pet.Paused=!app.Pet.Paused));
         panel.Children.Add(Ui.Text("變更自動套用 · 右鍵返回對話",13,Ui.Subtle));
-        var controls=new WrapPanel(); panel.Children.Add(controls);
-        controls.Children.Add(Ui.Button("重播語音",()=>app.ChatAction(c=>c.Replay())));
-        var clearConversation = Ui.Button("清除對話",()=>app.ChatAction(c=>c.ClearConversation()));
-        clearConversation.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(166, 38, 48));
-        clearConversation.Foreground = System.Windows.Media.Brushes.White;
-        clearConversation.FontWeight = FontWeights.SemiBold;
-        controls.Children.Add(clearConversation);
         var advanced=new StackPanel { Margin=new Thickness(0,12,0,0) };
         advanced.Children.Add(Ui.Text("OpenAI API Key · gpt-6.1-terra")); StylePassword(_open); _open.Password=app.Settings.OpenAiKey; advanced.Children.Add(_open);
         advanced.Children.Add(Ui.Text("ElevenLabs API Key · Eleven v4")); StylePassword(_eleven); _eleven.Password=app.Settings.ElevenLabsKey; advanced.Children.Add(_eleven);
@@ -86,15 +79,22 @@ public sealed partial class SettingsWindow : Window
         _mode.Items.Add(new ComboBoxItem { Content="陪伴 · 留在原地", Tag="companion" });
         _mode.Items.Add(new ComboBoxItem { Content="探索 · 自主走動", Tag="explore" });
         _mode.SelectedIndex=app.Settings.Mode switch { "explore"=>1,_=>0 }; _mode.Margin=new Thickness(0,0,0,16); panel.Children.Add(_mode);
-        _muted.IsChecked=app.Settings.Muted; _startup.IsChecked=StartupRegistration.IsEnabled;
-        foreach(var box in new[]{_muted,_startup}) { box.Foreground=Ui.Ink; box.Margin=new Thickness(0,5,0,12); panel.Children.Add(box); }
-        panel.Children.Add(Ui.Text("右鍵人物：開啟／收起介面；右鍵設定頁：返回橫幅。\n右鍵橫幅：收起。顯示介面時暫時陪伴，收起後恢復預設模式。\nCtrl + Shift + M 喚回；退出請用「退出米亞」或系統匣。",12,Ui.Subtle));
+        _voiceGeneration.IsChecked=!app.Settings.Muted; _startup.IsChecked=StartupRegistration.IsEnabled;
+        foreach(var box in new[]{_voiceGeneration,_startup}) { box.Foreground=Ui.Ink; box.Margin=new Thickness(0,5,0,12); panel.Children.Add(box); }
+        panel.Children.Add(Ui.Text("右鍵人物依序切換輸入橫幅、工作中心與收起。右鍵設定頁可回到輸入橫幅。\nCtrl + Shift + M 喚回；退出請用「退出米亞」或系統匣。",12,Ui.Subtle));
         panel.Children.Add(new Expander { Header="聲線與連線設定", Content=advanced, Foreground=Ui.Ink, Margin=new Thickness(0,8,0,12) });
         panel.Children.Add(_status);
+        AddAgentSettings(panel);
         _autoSave.Tick+=(_,_)=>FlushAutoSave();
         _mode.SelectionChanged+=(_,_)=>{if(!_syncing){_modeDirty=true;QueueAutoSave(true);}};
-        _muted.Checked+=(_,_)=>{if(!_syncing){_mutedDirty=true;QueueAutoSave(true);}};
-        _muted.Unchecked+=(_,_)=>{if(!_syncing){_mutedDirty=true;QueueAutoSave(true);}};
+        _voiceGeneration.Checked+=(_,_)=>VoiceGenerationChanged();
+        _voiceGeneration.Unchecked+=(_,_)=>VoiceGenerationChanged();
+        void VoiceGenerationChanged()
+        {
+            if (_syncing) return;
+            _voiceGenerationDirty = true;
+            QueueAutoSave(true);
+        }
         _startup.Checked+=(_,_)=>QueueAutoSave(true);_startup.Unchecked+=(_,_)=>QueueAutoSave(true);
         _open.PasswordChanged+=(_,_)=>QueueAutoSave();_eleven.PasswordChanged+=(_,_)=>QueueAutoSave();
         _voice.TextChanged+=(_,_)=>QueueAutoSave();_materials.TextChanged+=(_,_)=>QueueAutoSave();
@@ -113,10 +113,85 @@ public sealed partial class SettingsWindow : Window
         Activated+=(_,_)=>
         {
             RefreshMode(app.Settings.Mode);
-            if(!_mutedDirty) { _syncing=true;_muted.IsChecked=app.Settings.Muted;_syncing=false; }
+            if(!_voiceGenerationDirty) { _syncing=true;_voiceGeneration.IsChecked=!app.Settings.Muted;_syncing=false; }
         };
         Closed+=(_,_)=>{_autoSave.Stop();_closed=true;app.Pet.ModeChanged-=RefreshMode;CancelWork();};
         FloatingSurface.Attach(this,app.Pet);
+    }
+
+    private void AddAgentSettings(StackPanel panel)
+    {
+        string? workspace = Environment.GetEnvironmentVariable("MIA_CODEX_WORKSPACE");
+        string? codex = Environment.GetEnvironmentVariable("MIA_CODEX_EXECUTABLE");
+        string? profile = Environment.GetEnvironmentVariable("HERMES_HOME");
+        var section = new StackPanel { Margin = new Thickness(0, 14, 0, 0) };
+        panel.Children.Add(new Border { Child = section, Padding = new Thickness(12), Margin = new Thickness(0, 12, 0, 0),
+            CornerRadius = new CornerRadius(10), Background = Ui.Panel });
+        section.Children.Add(Ui.Text("代理與權限", 16, Ui.Gold));
+
+        section.Children.Add(Ui.Text("Hermes 主代理"));
+        var connection = Ui.Text(_app.Hermes is null ? _app.HermesConfigurationError ?? "未啟用。請從米亞 3.2 啟動捷徑開啟。" : "已設定本機 API。", 12, Ui.Subtle);
+        section.Children.Add(connection);
+        section.Children.Add(Ui.Text("Codex 執行助手"));
+        section.Children.Add(Ui.Text(File.Exists(codex) ? $"已找到執行程式\n{codex}" : "未找到執行程式。", 12, Ui.Subtle));
+        section.Children.Add(Ui.Text("Hermes 擴充"));
+        var extensions = Ui.Text("", 12, Ui.Subtle);
+        section.Children.Add(extensions);
+        var refresh = Ui.Button("檢查 Hermes 連線", () => { });
+        refresh.Click += (_, _) => _ = RefreshAsync();
+        refresh.IsEnabled = _app.Hermes is not null;
+        section.Children.Insert(3, refresh);
+        var install = Ui.Button("開啟擴充安裝任務", _app.OpenExtensionTask);
+        install.IsEnabled = _app.Hermes is not null;
+        section.Children.Add(install);
+        IsVisibleChanged += (_, _) => { if (IsVisible) RefreshExtensions(); };
+        RefreshExtensions();
+
+        section.Children.Add(Ui.Text("應用程式連線"));
+        section.Children.Add(Ui.Text("Windows 桌面自動操作已停用。OpenAI 與 ElevenLabs 金鑰可在上方的聲線與連線設定管理。", 12, Ui.Subtle));
+        section.Children.Add(Ui.Text("工作目錄與權限"));
+        section.Children.Add(Ui.Text("檔案工具接受 C 槽來源。通用命令工具已停用。Codex 使用 Windows 工作區沙箱，尚未提供整個 D 槽的讀取隔離。", 12, Ui.Subtle));
+        section.Children.Add(Ui.Text(workspace ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MIA Workspace"), 12, Ui.Subtle));
+        if (Directory.Exists(workspace))
+            section.Children.Add(Ui.Button("開啟工作目錄", () =>
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(workspace!) { UseShellExecute = true }); }
+                catch (System.ComponentModel.Win32Exception) { connection.Text = "無法開啟工作目錄。"; }
+            }));
+
+        var feedback = Ui.Text("", 12, Ui.Subtle);
+        var clear = Ui.Button("清除 Hermes 的記憶", () => { });
+        clear.Click += (_, _) => _ = ClearAsync();
+        clear.IsEnabled = _app.Hermes is not null;
+        clear.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(166, 38, 48));
+        clear.Foreground = System.Windows.Media.Brushes.White;
+        section.Children.Add(clear);
+        section.Children.Add(feedback);
+
+        void RefreshExtensions()
+        {
+            bool installed = profile is not null && File.Exists(Path.Combine(profile, "plugins", "mia-install-check", "plugin.yaml"));
+            extensions.Text = installed ? "已找到內附診斷擴充。" : "內附診斷擴充尚未安裝。";
+        }
+
+        async Task RefreshAsync()
+        {
+            refresh.IsEnabled = false;
+            try { connection.Text = await _app.Hermes!.ConnectionStatusAsync(); RefreshExtensions(); }
+            catch (Exception ex) { connection.Text = ChatWindow.Friendly(ex); }
+            finally { refresh.IsEnabled = true; }
+        }
+
+        async Task ClearAsync()
+        {
+            if (MessageBox.Show(this, "將永久清除米亞的 Hermes 對話紀錄、內建長期記憶及個人偏好記憶。已產出的工作檔案會保留。確定要清除嗎？",
+                "清除 Hermes 的記憶", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+            clear.IsEnabled = false;
+            feedback.Text = "正在清除 Hermes 的記憶…";
+            try { await _app.ClearHermesMemoryAsync(); feedback.Text = "已清除 Hermes 的記憶與對話紀錄。"; }
+            catch (Exception ex) { feedback.Text = "清除未完成。 " + ChatWindow.Friendly(ex); }
+            finally { clear.IsEnabled = true; }
+        }
     }
     private void QueueAutoSave(bool immediate=false)
     {
@@ -134,11 +209,11 @@ public sealed partial class SettingsWindow : Window
     {
         _app.Settings.OpenAiKey=_open.Password.Trim(); _app.Settings.ElevenLabsKey=_eleven.Password.Trim();
         _app.Settings.VoiceId=_voice.Text.Trim(); _app.Settings.VoiceMaterialsPath=_materials.Text.Trim();
-        if(_mutedDirty)_app.Settings.Muted=_muted.IsChecked==true;
+        if(_voiceGenerationDirty)_app.Settings.Muted=_voiceGeneration.IsChecked!=true;
         if(_modeDirty)_app.Settings.Mode=(_mode.SelectedItem as ComboBoxItem)?.Tag as string??"companion";
         bool startup=_startup.IsChecked==true;
         if(startup!=StartupRegistration.IsEnabled)StartupRegistration.Set(startup, _app.Hermes is not null);
-        _app.Settings.StartWithWindows=startup; _app.ApplySettings(); _modeDirty=false;_mutedDirty=false;
+        _app.Settings.StartWithWindows=startup; _app.ApplySettings(); _modeDirty=false;_voiceGenerationDirty=false;
     }
     private void ImportKeys()
     {
@@ -179,7 +254,7 @@ public sealed partial class SettingsWindow : Window
         if(_work!=null||_closed||_app.IsExiting)return;
         try
         {
-            Save(); if(_app.Settings.Muted) { _status.Text="請先取消靜音，再試聽。"; return; }
+            Save(); if(_app.Settings.Muted) { _status.Text="請先開啟語音生成，再試聽。"; return; }
             using var session=new CancellationTokenSource(); _work=session;
             try { _status.Text="正在生成與播放…"; await _app.Voice.SpeakAsync("嗨，我是米亞。今天也一起找出有趣的線索吧！",session.Token); if(!session.IsCancellationRequested&&!_closed&&!_app.IsExiting)_status.Text="試聽結束。"; }
             finally { if(ReferenceEquals(_work,session))_work=null; }

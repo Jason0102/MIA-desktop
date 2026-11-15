@@ -22,7 +22,7 @@ internal static class PcmStreamPlayer
     [DllImport("winmm.dll")] private static extern uint waveOutClose(IntPtr device);
     private static void Check(uint result) { if (result != 0) throw new IOException("Windows 無法播放串流語音。"); }
 
-    public static async Task PlayAsync(Stream stream, Action started, CancellationToken ct)
+    public static async Task PlayAsync(Stream stream, Func<Task> started, CancellationToken ct)
     {
         var format = new Format { Tag = 1, Channels = 1, Rate = 24000, BytesPerSecond = 48000, Align = 2, Bits = 16 };
         Check(waveOutOpen(out var device, uint.MaxValue, ref format, IntPtr.Zero, IntPtr.Zero, 0));
@@ -56,7 +56,7 @@ internal static class PcmStreamPlayer
                     buffers.Enqueue((header, data));
                 }
                 catch { if (prepared) waveOutUnprepareHeader(device, header, size); Marshal.FreeHGlobal(header); Marshal.FreeHGlobal(data); throw; }
-                if (!playing) { playing = true; started(); }
+                if (!playing) { playing = true; await started(); }
             }
             if (!playing) throw new IOException("語音服務回傳空白音訊。");
             while (buffers.Count > 0) { ct.ThrowIfCancellationRequested(); if (!ReleaseFinished()) await Task.Delay(5, ct); }

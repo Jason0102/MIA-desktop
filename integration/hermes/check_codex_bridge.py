@@ -1,6 +1,7 @@
 """Local bridge checks. No model calls and no real project input."""
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import sys
@@ -21,6 +22,7 @@ def test_staging(root):
     env = {"MIA_CODEX_WORKSPACE": str(root), "MIA_CODEX_EXECUTABLE": sys.executable}
 
     def simulate(command, prompt, job, env, timeout, interrupted):
+        assert any('model_reasoning_effort="' + level + '"' in command for level in ("medium", "high"))
         assert "--ignore-user-config" in command and "--sandbox" in command and command[-1] == "-"
         assert "核對文件" in prompt and "核對文件" not in command
         staged = job / "input" / source.name
@@ -30,18 +32,46 @@ def test_staging(root):
         (job / "codex-result.txt").write_text("已核對 MIA-CONTRACT-42", encoding="utf-8")
         return "completed", 0, ""
 
-    result = bridge.run_task({"task": "核對文件", "inputs": [source.name], "expected_artifacts": ["檢查結果.txt"]}, env, lambda: False, simulate)
+    session = "mia-test-session"
+    result = bridge.run_task({"reasoning_effort": "high", "task": "核對文件", "inputs": [source.name], "expected_artifacts": ["檢查結果.txt"]},
+                             env, lambda: False, simulate, session_id=session)
     assert result.get("status") == "completed", result
+    assert result["reasoning_effort"] == "high"
     assert result["output"] == "已核對 MIA-CONTRACT-42"
     assert result["artifacts"][0]["size_bytes"] == 7
     assert Path(result["artifacts"][0]["path"]).parent == root / "jobs" / result["job_id"] / "output"
     assert source.read_text(encoding="utf-8") == "MIA-CONTRACT-42"
+    original_job = result["job_id"]
+    manifest = root / "jobs" / original_job / "mia-delivery.json"
+    assert json.loads(manifest.read_text(encoding="utf-8")) == {"SessionId": session, "Files": ["output/檢查結果.txt"]}
+    def revise(command, prompt, job, *_):
+        assert job.name == original_job
+        (job / "output" / "檢查結果.txt").write_text("revised", encoding="utf-8")
+        Path(command[command.index("--output-last-message") + 1]).write_text("updated", encoding="utf-8")
+        return "completed", 0, ""
+    revised = bridge.run_task({"task": "修改文件", "resume_job": original_job, "expected_artifacts": ["檢查結果.txt"]},
+                             env, lambda: False, revise, session_id=session)
+    assert revised["status"] == "completed" and revised["job_id"] == original_job
+    assert (root / "jobs" / original_job / "output" / "檢查結果.txt").read_text(encoding="utf-8") == "revised"
+    assert json.loads(manifest.read_text(encoding="utf-8"))["SessionId"] == session
+    stale = bridge.run_task({"task": "修改文件", "resume_job": original_job}, env, lambda: False,
+                            lambda *_: ("completed", 0, ""))
+    assert stale["status"] == "failed", stale
+    invalid_resume = bridge.run_task({"task": "修改文件", "resume_job": "../outside"}, env, lambda: False, revise)
+    assert invalid_resume["status"] == "failed", invalid_resume
     result = bridge.run_task({"task": "核對文件", "inputs": [source.name], "expected_artifacts": ["missing.txt"]}, env, lambda: False, simulate)
     assert result.get("status") == "failed" and result["missing_artifacts"] == ["missing.txt"], result
 
-    for invalid in ("../x", "C:\\some-file.txt", "/etc/path", "\\\\server\\share\\file", "file:stream"):
+    for invalid in ("../x", "D:\\some-file.txt", "C:relative", "C:/../x", "/etc/path", "\\\\server\\share\\file", "file:stream"):
         result = bridge.run_task({"task": "核對文件", "inputs": [invalid]}, env, lambda: False, simulate)
         assert result.get("status") == "failed" and "job_id" not in result, result
+
+    if os.name == 'nt':
+        result = bridge.run_task({'task': '核對文件', 'inputs': [str(source)]}, env, lambda: False,
+                                 lambda command, prompt, job, *_: (
+                                     ('failed', 1, 'staged C input') if (job / 'input' / '1' / source.name).is_file()
+                                     else ('failed', 1, 'missing C input')))
+        assert result['error'] == 'staged C input', result
 
     def empty_result(*_args):
         return "completed", 0, ""
@@ -74,4 +104,20 @@ if __name__ == "__main__":
         root = Path(folder).resolve()
         test_staging(root)
         test_process(root)
+        import concurrent.futures
+        import threading
+        gate = threading.Barrier(2)
+        def parallel_runner(command, prompt, job, *_):
+            gate.wait(timeout=5)
+            (job / "output" / "result.txt").write_text(job.name, encoding="utf-8")
+            (job / "codex-result.txt").write_text(job.name, encoding="utf-8")
+            return "completed", 0, ""
+        def parallel_job():
+            return bridge.run_task({"task": "parallel", "expected_artifacts": ["result.txt"]},
+                {"MIA_CODEX_WORKSPACE": str(root), "MIA_CODEX_EXECUTABLE": sys.executable},
+                lambda: False, parallel_runner)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: parallel_job(), range(2)))
+        assert all(result["status"] == "completed" for result in results), results
+        assert results[0]["job_id"] != results[1]["job_id"]
     print("Codex bridge checks passed")
