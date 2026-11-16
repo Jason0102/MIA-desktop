@@ -79,6 +79,40 @@ public sealed partial class ChatWindow
             checks["full_reply_kept_without_tags_or_duplicates"] = spoken.VisibleText == SpeechTags.Display(final) && requests == 2;
             checks["audio_end_restores_act008"] = !voice.IsSpeaking && _app.Pet.CurrentAnimation == "thinking";
 
+            var playbackStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            int interruptedRequests = 0, playbackCount = 0;
+            using var interruptHandler = new ReplyAudioHandler((_, _) =>
+            {
+                interruptedRequests++;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    { Content = new ByteArrayContent(new byte[128]) });
+            });
+            using var interruptVoice = new VoiceService(
+                new AppSettings { ElevenLabsKey = "synthetic", VoiceId = "synthetic" }, interruptHandler,
+                async (_, token) =>
+                {
+                    if (++playbackCount == 1)
+                    {
+                        playbackStarted.SetResult();
+                        await Task.Delay(Timeout.Infinite, token);
+                    }
+                });
+            var interruptedReply = new ReplyPresentation(this, "米亞", ct, voice: interruptVoice);
+            const string interruptedText = "第一句正在播放。第二句不應再播放。";
+            Task oldPlayback = interruptedReply.CompleteAsync(interruptedText);
+            await playbackStarted.Task.WaitAsync(ct);
+            var queuedReply = new ReplyPresentation(this, "米亞", ct, voice: interruptVoice);
+            Task queuedPlayback = queuedReply.CompleteAsync("排隊的舊回覆。");
+            InterruptReplyAudio();
+            await Task.WhenAll(oldPlayback, queuedPlayback).WaitAsync(TimeSpan.FromSeconds(2), ct);
+            checks["new_input_interrupts_audio_and_queued_sentences"] =
+                interruptedRequests == 1 && playbackCount == 1;
+            checks["interrupted_reply_keeps_full_text_and_task_token"] =
+                interruptedReply.VisibleText == interruptedText && !ct.IsCancellationRequested;
+            var replacement = new ReplyPresentation(this, "米亞", ct, voice: interruptVoice);
+            await replacement.CompleteAsync("新的回覆。");
+            checks["new_reply_audio_plays_after_interruption"] = playbackCount == 2;
+
             _app.Settings.VoiceId = "";
             using var localVoice = new VoiceService(new AppSettings(), handler);
             bool localStarted = false;

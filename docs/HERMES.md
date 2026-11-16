@@ -24,6 +24,10 @@ MIA 維持桌面角色、對話與語音，透過只聽本機的 Hermes API 提�
 
 ## 使用方式
 
+本機桌面目前綁定唯一使用者佳勳（Jason）。隨程式的 `users.json` 保存使用者與來源綁定，可在 `state/mia/users.json` 放置自訂設定覆寫。兩種對話模式都會附帶解析後的身分。來源與帳號須由傳輸端指定，未綁定來源不會沿用桌面身分；此版本預留資料結構，尚未接入 Discord 帳號或多使用者記憶隔離。
+
+送出新訊息會立即中斷目前及排隊中的舊語音，保留回覆文字與背景工作，新回覆可正常播放。行事曆活動支援 `description` 說明／備註，可查詢、更新或清空，多行文字最多 10000 字元。
+
 - 右鍵點人物依序切換輸入橫幅、工作中心、收起。主對話持續承接上下文，由 Hermes 判斷閒聊、新任務或既有任務的補充。新任務可並行執行，補充優先送入原任務，暫時無法接收時等待目前步驟結束後接續原會話。最近 50 項任務索引存於工作目錄，可供主對話辨認已完成成果。工作中心與輸入橫幅同寬，只顯示進行中的任務、狀態、個別停止與必要的回覆控制。成果附上任務標題，語音依序播放。
 - 主對話從 Hermes 串流抽取 `message`，不顯示分派 JSON。啟用語音時逐句生成，音訊開始播放才逐步顯示該句文字；關閉語音時直接顯示收到的文字，不呼叫 ElevenLabs。任務完成通知立即發出，成果文字共用相同播放流程；語音失敗或停止仍保留完整文字。
 - 每句回應的 `[audio: 情緒]` 同時驅動語音與 EMO 動畫，標籤不顯示在聊天文字中。沒有可辨識標籤時使用 EMO-028（peaceful）。陪伴模式下，有執行中的任務便持續播放 ACT-008（thinking），EMO 說話動畫優先，說完後若仍有任務則恢復 ACT-008。動畫狀態不受原本 120 秒心情期限影響。
@@ -33,6 +37,12 @@ MIA 維持桌面角色、對話與語音，透過只聽本機的 Hermes API 提�
 - MIA 停用通用命令工具；桌面操作透過 `mia_computer_use` 接入，PowerPoint 驗證透過 `mia_powerpoint_check` 在主機執行。`mia_list_directory` 與 `mia_codex_run` 的來源路徑檢查會拒絕 D 槽、其他磁碟與重新導向的路徑。Codex CLI 保留 Windows 工作區沙箱，以 `--add-dir C:/` 開放 C 槽任務檔案讀寫；Windows 系統本身的 ACL 仍有效。C 槽限制適用於米亞的資料工具，現有 Windows 沙箱無法保證 Codex 子程序也有整顆 D 槽的讀取隔離。
 
 ## 驗證
+
+### 技能與任務回顧
+
+MIA 對話可查詢、建立及修訂 Hermes 技能。可以說「把這次驗證過的報告流程保存成技能」，再開新任務要求套用它。米亞用原生 `skills_list`、`skill_view` 與 `skill_manage` 查找、讀取及保存流程。使用者要求維護技能時由背景任務執行，已保存的技能可在不同任務間重用。
+
+Hermes 原生背景回顧會在符合工具迭代門檻的回合完成後，檢查執行過程並保存可重用的做法。門檻沿用 profile 的 `skills.creation_nudge_interval`（預設 15 次工具迭代），也可透過 `auxiliary.background_review.enabled` 設定是否自動回顧。技能預設保存在 `state/hermes/skills`，啟動器只在缺少行事曆技能時補上內附版本。
 
 ### 記憶與歷史續接
 
@@ -79,6 +89,8 @@ Hermes 的 clarify／approval 詢問會在對話顯示任務名稱與問題，�
 ```
 
 使用 `enable` 可重新啟用，使用 `remove` 可移除外部設定。已停用的內附行事曆可用 `enable mia_calendar` 恢復。
+
+若整合測試提示 Windows asyncio 無法啟動，請在允許本機迴路的 PowerShell 環境重跑 `integration/hermes/check_mcp_configuration.py`（使用 MIA 的 Hermes Python）。Windows 的事件迴圈需要本機迴路建立喚醒 socket，受限環境可能在 MCP 連線計時開始前就卡住。
 
 ## 工作看板與 Webhook
 

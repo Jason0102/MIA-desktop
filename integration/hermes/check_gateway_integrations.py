@@ -92,7 +92,7 @@ def smoke(workspace):
     }
     (home / "config.yaml").write_text(
         "plugins:\n  enabled: [mia-codex]\n"
-        "platform_toolsets:\n  api_server: [web, vision, todo, clarify, memory, session_search, mia_codex]\n"
+        "platform_toolsets:\n  api_server: [web, vision, todo, clarify, memory, session_search, skills, mia_codex]\n"
         "kanban:\n  dispatch_in_gateway: false\n"
         "model:\n  provider: openai-api\n  default: gpt-4.1-mini\n  base_url: http://127.0.0.1:1/v1\n",
         encoding="utf-8")
@@ -107,6 +107,39 @@ def smoke(workspace):
 
     run(launch + ["mia-configure-calendar"])
     assert "mia_calendar" in run(launch + ["mcp", "test", "mia_calendar"])
+    skill_check = f"""
+import json, sys
+sys.path.insert(0, {str(SOURCE)!r})
+from model_tools import get_tool_definitions
+from tools.registry import registry
+from tools.skill_provenance import BACKGROUND_REVIEW, set_current_write_origin
+
+get_tool_definitions(enabled_toolsets=["skills"], quiet_mode=True)
+name = "mia-report-workflow-check"
+def call(tool, args):
+    return json.loads(registry.dispatch(tool, args))
+def manage(action, **args):
+    return call("skill_manage", {{"operations": [{{"action": action, "name": name, **args}}]}})
+"""
+    run([sys.executable, "-I", "-B", "-c", skill_check + """
+created = manage("create", content=(
+    "---\\nname: mia-report-workflow-check\\n"
+    "description: Use when checking report totals before delivery.\\n---\\n"
+    "# Verify reports\\n\\nCompare all totals to the source.\\n"
+))
+assert created["success"] and not created.get("staged"), created
+set_current_write_origin(BACKGROUND_REVIEW)
+edit = dict(old_string="Compare all totals to the source.",
+            new_string="Compare the totals to the source and record any mismatch.")
+assert not manage("patch", **edit)["success"], "Review modified a skill without reading it"
+assert "Compare all totals" in str(call("skill_view", {"name": name}))
+updated = manage("patch", **edit)
+assert updated["success"] and not updated.get("staged"), updated
+"""])
+    run([sys.executable, "-I", "-B", "-c", skill_check + """
+assert name in str(call("skills_list", {}))
+assert "record any mismatch" in str(call("skill_view", {"name": name}))
+"""])
     checks = run([sys.executable, "-I", "-B", "-c", f"""
 import json, sys
 sys.path.insert(0, {str(SOURCE)!r})
@@ -138,12 +171,13 @@ print(registry.dispatch("mia_schedule_manage", {{
             assert "mia_schedule_manage" in active["mia_codex"], toolsets
             assert "mia_browser" in active["mia_codex"], toolsets
             assert "mia_calendar_workflow" in active["mia_codex"], toolsets
+            assert {"skills_list", "skill_view", "skill_manage"} <= active["skills"], toolsets
             assert {"mia_work_cards", "mia_templates", "mia_computer_use", "mia_powerpoint_check"} <= active["mia_codex"], toolsets
             assert "mia_execute_code" not in active["mia_codex"], active
             assert not {"browser", "terminal", "cronjob", "code_execution"} & active.keys(), active
             await_result(gateway, lambda: request(webhook_port, "/health"),
                          lambda result: result[0] == 200 and result[1]["service"] == "miawebhook")
-            print("PASS: real gateway API toolsets, installed MIA plugin, webhook health and calendar MCP probe",
+            print("PASS: real gateway API toolsets, durable skill review edits, webhook health and calendar MCP probe",
                   flush=True)
             stamp = str(int(time.time()))
             delivery = "gateway-integration-smoke"

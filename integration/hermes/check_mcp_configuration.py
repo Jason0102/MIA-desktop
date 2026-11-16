@@ -79,6 +79,22 @@ def probe(code, env):
     return result.stdout
 
 
+def check_windows_event_loop():
+    if sys.platform != "win32":
+        return
+    # Windows asyncio initializes its wake-up socket over loopback before
+    # Hermes can enforce the MCP connection timeout.
+    try:
+        subprocess.run([sys.executable, "-I", "-B", "-c",
+                        "import asyncio; asyncio.run(asyncio.sleep(0))"],
+                       check=True, timeout=8)
+    except subprocess.TimeoutExpired:
+        raise SystemExit(
+            "Windows asyncio could not start within 8 seconds, before contacting MCP. "
+            "Run this check in a local PowerShell session that permits loopback sockets."
+        ) from None
+
+
 def configure_fixture(url, token, env):
     code = (
         "from hermes_cli.mcp_config import _save_mcp_server; "
@@ -126,6 +142,7 @@ def verify(workspace):
 
 
 if __name__ == "__main__":
+    check_windows_event_loop()
     with tempfile.TemporaryDirectory(prefix="mia-mcp-check-", dir=SOURCE.parent.parent) as scratch:
         verify(Path(scratch))
     print("PASS: MIA MCP registration, disable/re-enable, native tool dispatch, bearer rejection and disconnect")

@@ -273,6 +273,7 @@ public sealed partial class ChatWindow : Window
     private async Task SendCoreAsync()
     {
         string text=_input.Text.Trim(); if(string.IsNullOrEmpty(text)||_capturing||_composing||_commitPending||_app.IsExiting)return;
+        InterruptReplyAudio();
         CancelReply();
         _hermesToolEvents.Clear();
         RenderActivity();

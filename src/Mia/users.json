@@ -1,0 +1,8 @@
+{
+  "Users": [
+    { "Id": "local-jason", "DisplayName": "佳勳", "Aliases": ["Jason", "jason"] }
+  ],
+  "Bindings": [
+    { "Provider": "desktop", "Subject": "local", "UserId": "local-jason" }
+  ]
+}

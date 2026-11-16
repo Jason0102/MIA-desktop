@@ -84,7 +84,7 @@ public sealed class AiService : IDisposable
             var configuration = new { type = "configuration_update", reasoning = new { effort = LastReasoningEffort } };
             input.Add(configuration);
             // Keep the static persona/cache prefix stable; refresh only this turn's local clock.
-            var timeContext=new { role = "developer", content = RoleProfile.TimeContext(DateTimeOffset.Now,TimeZoneInfo.Local.Id) };
+            var timeContext=new { role = "developer", content = RoleProfile.TimeContext(DateTimeOffset.Now,TimeZoneInfo.Local.Id) + "\n" + UserIdentity.Context("desktop", "local") };
             input.Add(timeContext);
             input.Add(new { role = "user", content });
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");

@@ -9,12 +9,24 @@ namespace Mia;
 
 public sealed partial class ChatWindow
 {
+    private CancellationTokenSource _speechInterruption = new();
+
+    private void InterruptReplyAudio()
+    {
+        var previous = _speechInterruption;
+        _speechInterruption = new();
+        previous.Cancel();
+        previous.Dispose();
+        _app.Voice.Stop();
+    }
+
     // Each response owns its text and cancellation; only audible playback is shared.
     private sealed class ReplyPresentation
     {
         private readonly ChatWindow owner;
         private readonly string who;
         private readonly CancellationToken ct;
+        private readonly CancellationToken speechGeneration;
         private readonly Guid id = Guid.NewGuid();
         private readonly Channel<string> sentences = Channel.CreateUnbounded<string>();
         private readonly bool audio;
@@ -37,6 +49,7 @@ public sealed partial class ChatWindow
             VoiceService? voice = null, IReadOnlyList<TaskResult>? results = null)
         {
             this.owner = owner; this.who = who; this.ct = ct;
+            speechGeneration = owner._speechInterruption.Token;
             this.readUrls = readUrls;
             this.voice = voice ?? owner._app.Voice;
             this.results = results;
@@ -71,6 +84,7 @@ public sealed partial class ChatWindow
             EnsureBody();
             body!.Text = display;
             owner._scroll.ScrollToEnd();
+            if (speechGeneration.IsCancellationRequested) return;
             if (display == animatedText) return;
             owner._app.Pet.SetTextReply(id, text);
             lastTextAt = Stopwatch.GetTimestamp();
@@ -100,13 +114,18 @@ public sealed partial class ChatWindow
                         panel.Children.Add(Ui.Text(note, 12, Ui.Subtle));
                     owner._scroll.ScrollToEnd();
                 }
-                if (textAnimationStarted is long start)
+                if (!speechGeneration.IsCancellationRequested && textAnimationStarted is long start)
                 {
                     // Count the time already spent animating while text streamed in.
                     var remaining = TextAnimationDuration(animatedText) - Stopwatch.GetElapsedTime(start);
                     var tail = TimeSpan.FromMilliseconds(400) - Stopwatch.GetElapsedTime(lastTextAt);
                     if (tail > remaining) remaining = tail;
-                    if (remaining > TimeSpan.Zero) await Task.Delay(remaining, ct);
+                    if (remaining > TimeSpan.Zero)
+                    {
+                        using var animation = CancellationTokenSource.CreateLinkedTokenSource(ct, speechGeneration);
+                        try { await Task.Delay(remaining, animation.Token); }
+                        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+                    }
                 }
             }
             finally { owner._app.Pet.SetTextReply(id, null); }
@@ -148,22 +167,24 @@ public sealed partial class ChatWindow
 
         private async Task PlayAsync()
         {
+            using var speech = CancellationTokenSource.CreateLinkedTokenSource(ct, speechGeneration);
+            var audioToken = speech.Token;
             try
             {
-                await foreach (string sentence in sentences.Reader.ReadAllAsync(ct))
+                await foreach (string sentence in sentences.Reader.ReadAllAsync(audioToken))
                 {
-                    await owner._speechQueue.WaitAsync(ct);
+                    await owner._speechQueue.WaitAsync(audioToken);
                     try
                     {
                         if (owner._app.Settings.Muted) { fallback = true; ShowDirect(); continue; }
                         Task reveal = Task.CompletedTask;
                         try
                         {
-                            await voice.SpeakAsync(sentence, ct,
+                            await voice.SpeakAsync(sentence, audioToken,
                                 segment =>
                                 {
                                     audioStarted |= voice.IsSpeaking;
-                                    reveal = RevealAfterAsync(reveal, segment);
+                                    reveal = RevealAfterAsync(reveal, segment, audioToken);
                                 }, readUrls);
                         }
                         finally { await reveal; }
@@ -180,10 +201,10 @@ public sealed partial class ChatWindow
             }
         }
 
-        private async Task RevealAfterAsync(Task previous, string segment)
+        private async Task RevealAfterAsync(Task previous, string segment, CancellationToken audioToken)
         {
             await previous;
-            if (ct.IsCancellationRequested || owner._app.IsExiting) return;
+            if (audioToken.IsCancellationRequested || owner._app.IsExiting) return;
             string display = SpeechTags.Display(segment);
             if (string.IsNullOrWhiteSpace(display)) return;
             EnsureBody();
@@ -193,11 +214,11 @@ public sealed partial class ChatWindow
             {
                 for (int count = 1; count <= starts.Length; count = Math.Min(count + 3, starts.Length))
                 {
-                    if (owner._app.IsExiting || ct.IsCancellationRequested) return;
+                    if (owner._app.IsExiting || audioToken.IsCancellationRequested) return;
                     body!.Text = prefix + (count == starts.Length ? display : display[..starts[count]]);
                     owner._scroll.ScrollToEnd();
                     if (count == starts.Length) break;
-                    await Task.Delay(30, ct);
+                    await Task.Delay(30, audioToken);
                 }
                 revealed.Append(display);
             }

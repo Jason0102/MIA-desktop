@@ -174,7 +174,9 @@ try {
     }
     $calendarSkill = Join-Path $homePath 'skills/mia-calendar'
     New-Item -ItemType Directory -Force -Path $calendarSkill | Out-Null
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'integration/hermes/skills/mia-calendar/SKILL.md') -Destination $calendarSkill
+    if (-not (Test-Path -LiteralPath (Join-Path $calendarSkill 'SKILL.md'))) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'integration/hermes/skills/mia-calendar/SKILL.md') -Destination $calendarSkill
+    }
 
     Set-LaunchProgress 38 '連接行事曆與工作服務…'
     Invoke-Hermes mia-configure-calendar
@@ -224,7 +226,7 @@ try {
     $env:MIA_WEBHOOK_PORT = [string]$WebhookPort
     if ($SelfTestTaskFile) { $env:MIA_DATA_DIR = Join-Path $workPath ('checks/' + [guid]::NewGuid().ToString('N')) }
     # Keep the API tool selection local to this profile and avoid starting other adapters.
-    $toolsets = @('web','vision','todo','clarify','memory','session_search','mia_codex')
+    $toolsets = @('web','vision','todo','clarify','memory','session_search','skills','mia_codex')
     if ($EnableIsolatedCode) {
         if (-not (Get-Command docker -CommandType Application -ErrorAction SilentlyContinue)) {
             throw 'Install and start Docker Desktop before using -EnableIsolatedCode.'
