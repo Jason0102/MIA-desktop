@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,6 +32,7 @@ public sealed partial class ChatWindow : Window
     private string? _hermesFinalReply;
     private sealed record Attachment(byte[] Bytes, DateTime Time);
     private readonly List<Attachment> _attachments=new();
+    private readonly List<string> _fileAttachments = new();
     private bool _capturing;
     private bool _composing, _commitPending;
     private CancellationTokenSource? _captureCancellation;
@@ -147,8 +148,8 @@ public sealed partial class ChatWindow : Window
         Closing+=(_,e)=> { if(!_app.IsExiting) { e.Cancel=true; Hide(); } };
         PreviewMouseRightButtonUp+=(_,e)=>{e.Handled=true;Hide();};
         AllowDrop=true;
-        DragOver+=(_,e)=>{ e.Effects=e.Data.GetDataPresent(DataFormats.FileDrop)||e.Data.GetDataPresent(DataFormats.UnicodeText)?DragDropEffects.Copy:DragDropEffects.None; e.Handled=true; };
-        Drop+=OnDrop;
+        PreviewDragOver+=(_,e)=>{ e.Effects=e.Data.GetDataPresent(DataFormats.FileDrop)||e.Data.GetDataPresent(DataFormats.UnicodeText)?DragDropEffects.Copy:DragDropEffects.None; e.Handled=true; };
+        PreviewDrop+=OnDrop;
         FloatingSurface.Attach(this,app.Pet,wrap:false,suppressEscape:()=>_composing||_commitPending,
             preferredSize:()=> (380, double.NaN));
         IsVisibleChanged+=(_,_)=> { if(IsVisible)Dispatcher.BeginInvoke(new Action(()=> { if(IsVisible && !IsWorkCenter && !_app.IsExiting)_input.Focus(); })); else app.Pet.BeginListening(false); };
@@ -163,7 +164,7 @@ public sealed partial class ChatWindow : Window
         _bannerDetails.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         _capsule.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         _stop.Visibility = Visibility.Collapsed;
-        _details.Visibility = enabled || _messages.Children.Count > 0 || _attachments.Count > 0 || _status.Text.Length > 0
+        _details.Visibility = enabled || _messages.Children.Count > 0 || _attachments.Count > 0 || _fileAttachments.Count > 0 || _status.Text.Length > 0
             ? Visibility.Visible : Visibility.Collapsed;
         FloatingSurface.RefreshScale(this, _app.Settings.UiScale);
         UpdateWorkLayout();
@@ -184,8 +185,10 @@ public sealed partial class ChatWindow : Window
         if (!IsWorkCenter) return;
         _activity.Children.Clear();
         var running = _jobs.Where(job => job.Reply is null).ToArray();
-        if (running.Length == 0) _activity.Children.Add(Ui.Text("目前沒有進行中的任務", 13, Ui.Subtle));
+        if (running.Length == 0 && !_boardCards.Any(c => c.Status != "done")) _activity.Children.Add(Ui.Text("目前沒有進行中的任務", 13, Ui.Subtle));
         foreach (var job in running) _activity.Children.Add(job.Card);
+        RenderBoardStatus();
+        if (_kanbanStatus.Text.Length > 0) _activity.Children.Add(Ui.Text(_kanbanStatus.Text, 12, Ui.Subtle));
     }
     internal static bool ShouldSubmitEnter(Key key,bool composing,bool commitPending) => key==Key.Enter && !composing && !commitPending;
     private bool OwnsRequest(CancellationTokenSource session) => ReferenceEquals(_request,session) && !session.IsCancellationRequested && !_app.IsExiting;
@@ -263,6 +266,7 @@ public sealed partial class ChatWindow : Window
             _status.Text = error;
             return Task.CompletedTask;
         }
+        if (_app.Hermes is null && _fileAttachments.Count > 0) { _status.Text = "請透過啟動米亞.vbs 啟動 Hermes，才能處理檔案附件。"; return Task.CompletedTask; }
         return _app.Hermes is not null ? SendJobAsync() : SendCoreAsync();
     }
 
@@ -496,9 +500,30 @@ public sealed partial class ChatWindow : Window
             remove.HorizontalAlignment=HorizontalAlignment.Right;remove.VerticalAlignment=VerticalAlignment.Bottom;
             remove.Background=new SolidColorBrush(Color.FromArgb(230,45,45,45));tile.Children.Add(remove);_previews.Children.Add(tile);
         }
-        _attachmentLabel.Text=_attachments.Count==0?"":$"待傳送 {_attachments.Count}/6 張 · 可繼續框選，與文字一起送出";
+        foreach (string path in _fileAttachments)
+        {
+            var tile = new DockPanel { Margin = new Thickness(0, 4, 8, 4), MaxWidth = 300, ToolTip = path };
+            var remove = IconButton("\uE711", "移除此檔案", () => { _fileAttachments.Remove(path); RenderAttachments(); });
+            remove.Width = 28; remove.Height = 28; DockPanel.SetDock(remove, Dock.Right);
+            tile.Children.Add(remove);
+            tile.Children.Add(Ui.Text(Path.GetFileName(path), 12));
+            _previews.Children.Add(tile);
+        }
+        _attachmentLabel.Text = _attachments.Count + _fileAttachments.Count == 0 ? "" :
+            $"待傳送 {_fileAttachments.Count} 個檔案、{_attachments.Count} 張快照 · 與文字一起送出";
     }
-    private void ClearAttachment() { _attachments.Clear(); RenderAttachments(); }
+    private void ClearAttachment() { _attachments.Clear(); _fileAttachments.Clear(); RenderAttachments(); }
+    private void AttachFiles(string[] files)
+    {
+        var paths = files.Select(FileAttachments.Validate).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (paths.Union(_fileAttachments, StringComparer.OrdinalIgnoreCase).Count() > 16)
+            throw new InvalidOperationException("一次最多附加 16 個檔案。");
+        foreach (string path in paths)
+            if (!_fileAttachments.Contains(path, StringComparer.OrdinalIgnoreCase)) _fileAttachments.Add(path);
+        RenderAttachments();
+        _details.Visibility = Visibility.Visible;
+        _status.Text = "檔案已加入；輸入需求後傳送。";
+    }
     internal bool VerifyAttachmentControls()
     {
         ClearAttachment();
@@ -513,33 +538,29 @@ public sealed partial class ChatWindow : Window
         var remove=(Button)middle.Children[1];remove.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         return _attachments.Count==2 && ReferenceEquals(_attachments[0],first) && ReferenceEquals(_attachments[1],last) && _previews.Children.Count==2;
     }
+    internal bool VerifyFileAttachmentControls()
+    {
+        ClearAttachment();
+        string first = Path.Combine(SettingsStore.DataDirectory, "附件.custom");
+        string second = Path.Combine(SettingsStore.DataDirectory, "資料.docx");
+        File.WriteAllText(first, "synthetic file"); File.WriteAllText(second, "synthetic file");
+        AttachFiles([first, second, first]);
+        bool accepted = _fileAttachments.Count == 2 && _previews.Children.Count == 2;
+        var tile = (DockPanel)_previews.Children[0];
+        ((Button)tile.Children[0]).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        bool removed = _fileAttachments.SequenceEqual([second]) && _previews.Children.Count == 1;
+        ClearAttachment();
+        bool cleared = _fileAttachments.Count == 0 && _previews.Children.Count == 0 && File.Exists(first) && File.Exists(second);
+        AttachFiles([first, second]);
+        return accepted && removed && cleared;
+    }
     private void OnDrop(object sender,DragEventArgs e)
     {
         try
         {
             if(e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length>0)
             {
-                if(files.Length+_attachments.Count>6)throw new InvalidOperationException("一次最多六張附圖。");
-                foreach(string path in files)
-                {
-                    if (_app.Hermes is not null)
-                    {
-                        var file = new FileInfo(path);
-                        if (!Path.GetPathRoot(file.FullName)!.Equals(@"C:\", StringComparison.OrdinalIgnoreCase) ||
-                            (file.Attributes & FileAttributes.ReparsePoint) != 0)
-                            throw new InvalidOperationException("Hermes 附圖必須來自 C 槽的實際檔案。");
-                        for (var folder = file.Directory; folder is not null; folder = folder.Parent)
-                            if ((folder.Attributes & FileAttributes.ReparsePoint) != 0)
-                                throw new InvalidOperationException("Hermes 附圖不可來自重新導向的資料夾。");
-                    }
-                string ext=Path.GetExtension(path).ToLowerInvariant();
-                if(ext is not (".png" or ".jpg" or ".jpeg"))throw new InvalidOperationException("請拖入 PNG 或 JPG 圖片。");
-                if(new FileInfo(path).Length>10*1024*1024)throw new InvalidOperationException("請使用小於 10 MB 的圖片。");
-                using var stream=File.OpenRead(path); var source=BitmapFrame.Create(stream,BitmapCreateOptions.None,BitmapCacheOption.OnLoad);
-                double scale=Math.Min(1,1600.0/Math.Max(source.PixelWidth,source.PixelHeight));
-                BitmapSource scaled=scale<1?new TransformedBitmap(source,new ScaleTransform(scale,scale)):source;
-                var encoder=new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(scaled)); using var output=new MemoryStream(); encoder.Save(output); Attach(output.ToArray());
-                }
+                AttachFiles(files);
             }
             else if(e.Data.GetData(DataFormats.UnicodeText) is string text)_input.Text=text.Length>8000?text[..8000]:text;
         }

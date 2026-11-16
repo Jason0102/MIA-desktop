@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.ComponentModel;
 using System.IO;
@@ -73,6 +73,7 @@ public static class SettingsStore
             var stored = JsonSerializer.Deserialize<StoredSettings>(File.ReadAllText(file))
                          ?? throw new InvalidDataException();
             var settings = stored.Settings ?? new();
+            if (settings.OpenAiModel == "gpt-6.1-terra") settings.OpenAiModel = "gpt-6.1-sol";
             settings.OpenAiKey = Unprotect(stored.OpenAiSecret);
             settings.ElevenLabsKey = Unprotect(stored.ElevenLabsSecret);
             settings.PetScale = double.IsFinite(settings.PetScale) ? Math.Clamp(settings.PetScale, 0.5, 3) : 1;

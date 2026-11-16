@@ -10,6 +10,9 @@ from .browser_tools import registration as browser_registration
 from .scheduled_tasks import register_scheduled_tasks
 from .webhook_events import register_webhook
 from .isolated_code import block_native_code, registration as code_registration
+from .work_cards import registration as cards_registration
+from .templates import registration as templates_registration
+from .desktop_tools import computer_registration, powerpoint_registration
 
 
 def calendar_workflow(_args, **_kwargs):
@@ -24,6 +27,10 @@ def calendar_workflow(_args, **_kwargs):
 
 
 def register(ctx):
+    ctx.register_tool(**cards_registration())
+    ctx.register_tool(**templates_registration())
+    ctx.register_tool(**computer_registration())
+    ctx.register_tool(**powerpoint_registration())
     ctx.register_tool(**registration())
     ctx.register_tool(**extension_registration())
     ctx.register_tool(**directory_registration())

@@ -24,6 +24,11 @@ def test_staging(root):
     def simulate(command, prompt, job, env, timeout, interrupted):
         assert any('model_reasoning_effort="' + level + '"' in command for level in ("medium", "high"))
         assert "--ignore-user-config" in command and "--sandbox" in command and command[-1] == "-"
+        assert command[command.index("--model") + 1] == "gpt-6.1-sol"
+        assert command[command.index("--add-dir") + 1] == ("C:/" if os.name == "nt" else str(root))
+        assert "Work only within this directory" not in prompt
+        assert "Keep newly created programs, test scripts" in prompt and "anywhere on C:" in prompt
+        assert "mia_powerpoint_check" in prompt
         assert "核對文件" in prompt and "核對文件" not in command
         staged = job / "input" / source.name
         assert staged.read_text(encoding="utf-8") == "MIA-CONTRACT-42"

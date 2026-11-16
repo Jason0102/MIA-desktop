@@ -93,6 +93,9 @@ public sealed class HermesService : IDisposable
             使用者面向的完成回覆以 1 至 3 句描述成果，不列出成果路徑、工作編號或內部識別碼；
             介面會附上可直接開啟的檔案卡。工具回傳的路徑及編號保留在會話中供續接使用。
             只在工具有可驗證的結果時宣告完成。
+            使用者已開放任務相關的 C 槽檔案讀寫與軟體調用；新增程式、測試與暫存檔留在工作目錄。
+            重用模板先查 mia_templates；需保存時用 save 確認寫入。PowerPoint 視覺驗證在 Codex 產檔後呼叫 mia_powerpoint_check 並檢視匯出圖片。
+            桌面軟體由 mia_computer_use 觀察及操作，工具仍保留審批與中斷。不要因 Codex 沙箱無法開啟 Office 就停止整個委託。
             委派 Codex 時必須按該步驟需求設定 reasoning_effort：簡單格式調整或明確的小修改用 low，一般文件與實作用 medium，複雜除錯、多步分析、跨檔重構或高度不確定工作用 high。不要只按字數判斷；使用者明確指定時優先遵從。
             修改既有 Codex 成果時，將先前工具返回的 job_id 填入 mia_codex_run 的 resume_job，接續原工作目錄。
             使用者要求驗證米亞的擴充安裝時，使用 mia_install_extension 並回報工具實際返回的狀態及驗證標記。

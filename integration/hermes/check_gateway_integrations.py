@@ -138,6 +138,7 @@ print(registry.dispatch("mia_schedule_manage", {{
             assert "mia_schedule_manage" in active["mia_codex"], toolsets
             assert "mia_browser" in active["mia_codex"], toolsets
             assert "mia_calendar_workflow" in active["mia_codex"], toolsets
+            assert {"mia_work_cards", "mia_templates", "mia_computer_use", "mia_powerpoint_check"} <= active["mia_codex"], toolsets
             assert "mia_execute_code" not in active["mia_codex"], active
             assert not {"browser", "terminal", "cronjob", "code_execution"} & active.keys(), active
             await_result(gateway, lambda: request(webhook_port, "/health"),

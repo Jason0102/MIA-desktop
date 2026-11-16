@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$Setup,
     [switch]$GatewayOnly,
     [switch]$ShowLaunchError,
@@ -12,7 +12,7 @@ param(
     [string]$AppPath,
     [string]$OpenAiKeyFile,
     [string]$CodexPath,
-    [string]$Model,
+    [string]$Model = 'gpt-6.1-sol',
     [string]$SelfTestTaskFile
 )
 
@@ -23,6 +23,15 @@ $exe = Join-Path $PSScriptRoot 'dist/MIA-3.2-win-x64/MIA.exe'
 $service = $null
 $launchLock = $null
 $legacyLock = $null
+$loading = $null
+$progressPath = $null
+
+function Set-LaunchProgress([int]$Percent, [string]$Message) {
+    if ($script:progressPath) {
+        @{percent=$Percent; message=$Message} | ConvertTo-Json -Compress |
+            Set-Content -LiteralPath $script:progressPath -Encoding UTF8
+    }
+}
 
 function Invoke-Hermes {
     & $script:hermes -I -B $script:entry @args
@@ -30,13 +39,16 @@ function Invoke-Hermes {
 }
 
 try {
+    # A PowerShell 7 parent can leave incompatible modules earlier in PSModulePath.
+    # Use this host's built-in DPAPI cmdlets, including when launched from VBS.
+    Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
     $documents = [Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)
     if (-not $documents -or [IO.Path]::GetPathRoot($documents) -ne 'C:\') {
         throw 'The Windows Documents folder must be on C: for MIA work.'
     }
     $workPath = Join-Path $documents 'MIA Workspace'
     # Reject redirected paths, including junctions above the workspace.
-    foreach ($relative in @('', 'input', 'jobs', 'downloads', 'temp', 'state', 'state/hermes', 'state/mia', 'state/codex', 'logs', 'checks')) {
+    foreach ($relative in @('', 'input', 'jobs', 'templates', 'downloads', 'temp', 'state', 'state/hermes', 'state/mia', 'state/codex', 'logs', 'checks')) {
         $folder = if ($relative) { Join-Path $workPath $relative } else { $workPath }
         for ($parent = [IO.DirectoryInfo]::new($folder); $null -ne $parent; $parent = $parent.Parent) {
             if ($parent.Exists -and ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
@@ -50,6 +62,15 @@ try {
     $homePath = Join-Path $state 'hermes'
     $miaData = Join-Path $state 'mia'
     $launchLock = [IO.File]::Open((Join-Path $state 'launch.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+    if (-not $GatewayOnly -and -not $Setup -and -not $McpCommand -and -not $SelfTestTaskFile) {
+        $progressExe = if ($AppPath) { $AppPath } else { $exe }
+        if (Test-Path -LiteralPath $progressExe -PathType Leaf) {
+            $progressPath = Join-Path $workPath ('temp/launch-' + [guid]::NewGuid().ToString('N') + '.json')
+            $env:MIA_LAUNCH_PROGRESS = $progressPath
+            Set-LaunchProgress 8 '整理工作空間…'
+            $loading = Start-Process -FilePath $progressExe -ArgumentList @('--loading', ('"{0}"' -f $progressPath), "$PID") -PassThru
+        }
+    }
     $env:MIA_TASK_TEMP = Join-Path $workPath 'temp'
     $env:TEMP = $env:MIA_TASK_TEMP
     $env:TMP = $env:MIA_TASK_TEMP
@@ -64,6 +85,7 @@ try {
             }
         } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
     if (-not $hermes) { throw 'Run Install-Hermes.ps1 first.' }
+    Set-LaunchProgress 22 '載入米亞設定與工具…'
     $migrationMarker = Join-Path $state 'migrated-3.2'
     if (-not (Test-Path -LiteralPath $migrationMarker)) {
         $oldLockPath = Join-Path $runtime 'launch.lock'
@@ -107,7 +129,7 @@ try {
         ConvertTo-SecureString -String $key.Value -AsPlainText -Force | ConvertFrom-SecureString |
             Set-Content -LiteralPath $keyStore -Encoding ASCII
         Remove-Variable keyText,key
-        if (-not $Model) { $Model = 'gpt-6.1-terra' }
+        if (-not $Model) { $Model = 'gpt-6.1-sol' }
     }
     if (-not $env:OPENAI_API_KEY -and (Test-Path -LiteralPath $keyStore -PathType Leaf)) {
         $secret = (Get-Content -LiteralPath $keyStore -Raw).Trim() | ConvertTo-SecureString
@@ -122,6 +144,7 @@ try {
     if (-not $codex) { throw 'Install the Codex CLI or pass -CodexPath to its executable.' }
     $env:MIA_CODEX_EXECUTABLE = $codex
     $env:MIA_CODEX_WORKSPACE = $workPath
+    $env:MIA_CODEX_MODEL = $Model
     if (-not $env:MIA_CODEX_WINDOWS_SANDBOX) { $env:MIA_CODEX_WINDOWS_SANDBOX = 'mxc' }
     $codexHome = Join-Path $state 'codex'
     $previousCodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
@@ -137,13 +160,14 @@ try {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'integration/hermes/SOUL.md') -Destination $soul
     }
     $plugin = Join-Path $homePath 'plugins/mia-codex'
-    foreach ($name in @('plugin.yaml','__init__.py','bridge.py','extensions.py','history.py','browser_tools.py','scheduled_tasks.py','webhook_events.py','isolated_code.py')) {
+    foreach ($name in @('plugin.yaml','__init__.py','bridge.py','extensions.py','history.py','browser_tools.py','scheduled_tasks.py','webhook_events.py','isolated_code.py','work_cards.py','templates.py','desktop_tools.py','powerpoint.ps1')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot "integration/hermes/mia-codex/$name") -Destination $plugin
     }
     $calendarSkill = Join-Path $homePath 'skills/mia-calendar'
     New-Item -ItemType Directory -Force -Path $calendarSkill | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'integration/hermes/skills/mia-calendar/SKILL.md') -Destination $calendarSkill
 
+    Set-LaunchProgress 38 '連接行事曆與工作服務…'
     Invoke-Hermes mia-configure-calendar
     if ($McpCommand) {
         if ($McpCommand[0] -in @('enable','disable')) {
@@ -165,7 +189,7 @@ try {
         Invoke-Hermes config set browser.headed true
     }
     if ($env:OPENAI_API_KEY) {
-        if (-not $Model -and -not (Test-Path -LiteralPath $keyStore -PathType Leaf)) { $Model = 'gpt-6.1-terra' }
+        if (-not $Model -and -not (Test-Path -LiteralPath $keyStore -PathType Leaf)) { $Model = 'gpt-6.1-sol' }
         Invoke-Hermes config set model.provider openai-api
         Invoke-Hermes config set model.base_url https://api.openai.com/v1
     }
@@ -218,6 +242,7 @@ try {
         $env:MIA_ISOLATED_CODE = $null
     }
     Invoke-Hermes config set platform_toolsets.api_server ('[' + ($toolsets -join ', ') + ']')
+    Set-LaunchProgress 64 '啟動 Hermes，等待連線…'
     $arguments = @('-I','-B',('"{0}"' -f $entry),'gateway','run')
     $service = Start-Process -FilePath $hermes -ArgumentList $arguments -WorkingDirectory $workPath -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput (Join-Path $workPath 'logs/hermes-gateway.log') -RedirectStandardError (Join-Path $workPath 'logs/hermes-gateway-error.log')
@@ -231,6 +256,7 @@ try {
         } catch { Start-Sleep -Milliseconds 400 }
     }
     if (-not $ready) { throw "Hermes did not start. Check $workPath\logs\hermes-gateway-error.log." }
+    Set-LaunchProgress 88 '載入人物與對話介面…'
     if ($WebhookRules) {
         $webhookReady = $false
         for ($attempt = 0; $attempt -lt 20 -and -not $service.HasExited; $attempt++) {
@@ -256,17 +282,28 @@ try {
         elseif ($WorkCenter) { $miaArgs = @('--work-center') }
         $mia = if ($miaArgs.Count) { Start-Process -FilePath $exe -ArgumentList $miaArgs -WorkingDirectory $workPath -PassThru }
             else { Start-Process -FilePath $exe -WorkingDirectory $workPath -PassThru }
+        if ($loading) {
+            # The pet signals readiness only after WPF renders its first frame.
+            while (-not $loading.HasExited -and -not $mia.HasExited) { Start-Sleep -Milliseconds 100 }
+            if ($mia.HasExited -and -not $loading.HasExited) { [IO.File]::WriteAllText($progressPath + '.ready', 'closed') }
+        }
         $mia.WaitForExit()
         if ($SelfTestTaskFile) { Write-Host "MIA check result: $env:MIA_DATA_DIR\hermes-ui-check.json" }
         if ($mia.ExitCode -ne 0) { throw "MIA exited with code $($mia.ExitCode)." }
     }
 } catch {
+    if ($progressPath) { [IO.File]::WriteAllText($progressPath + '.ready', 'failed') }
     if ($ShowLaunchError) {
         Add-Type -AssemblyName PresentationFramework
         $null = [Windows.MessageBox]::Show($_.Exception.Message, 'MIA 3.2')
     }
     throw
 } finally {
+    if ($progressPath) {
+        [IO.File]::WriteAllText($progressPath + '.ready', 'closed')
+        if ($loading) { $null = $loading.WaitForExit(2000) }
+        Remove-Item -LiteralPath $progressPath,($progressPath + '.ready') -ErrorAction SilentlyContinue
+    }
     if ($service -and -not $service.HasExited) {
         # Stop only the process tree started by this launcher.
         & "$env:SystemRoot\System32\taskkill.exe" /pid $service.Id /t /f 2>$null | Out-Null

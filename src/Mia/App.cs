@@ -36,6 +36,8 @@ public sealed partial class App : Application
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Length == 3 && args[0] == "--loading" && int.TryParse(args[2], out int launcher))
+            return new Application().Run(new LoadingWindow(args[1], launcher));
         if(args.Length==2 && args[0]=="--dock-fixture") { InteractionDiagnostics.RunFixture(args[1]);return 0; }
         if(args.Contains("--exit"))
         {
@@ -69,6 +71,11 @@ public sealed partial class App : Application
         try { Hermes=HermesService.FromEnvironment(); }
         catch (ArgumentException ex) { HermesConfigurationError=ex.Message; }
         Pet=new PetWindow(); MainWindow=Pet;
+        Pet.ContentRendered += (_, _) =>
+        {
+            if (Environment.GetEnvironmentVariable("MIA_LAUNCH_PROGRESS") is { Length: > 0 } progress)
+                try { File.WriteAllText(progress + ".ready", "ready"); } catch (IOException) { }
+        };
         Pet.SetAllowedScreens(Settings.AllowedScreenIds);
         Pet.ChatRequested += CycleWorkSurface;
         Pet.SettingsRequested += ShowSettings;
@@ -175,7 +182,9 @@ public sealed partial class App : Application
                     if(e.Args.Contains("--attachment-self-test"))
                     {
                         Directory.CreateDirectory(SettingsStore.DataDirectory);
-                        File.WriteAllText(Path.Combine(SettingsStore.DataDirectory,"attachment-check.json"),System.Text.Json.JsonSerializer.Serialize(new { removedOnlySelectedImage=_chat!.VerifyAttachmentControls() }));
+                        File.WriteAllText(Path.Combine(SettingsStore.DataDirectory,"attachment-check.json"),System.Text.Json.JsonSerializer.Serialize(new {
+                            removedOnlySelectedImage=_chat!.VerifyAttachmentControls(),
+                            arbitraryFilesAndRemoval=_chat.VerifyFileAttachmentControls() }));
                     }
                     _chat!.UpdateLayout();
                     var image=new System.Windows.Media.Imaging.RenderTargetBitmap((int)_chat.ActualWidth,(int)_chat.ActualHeight,96,96,System.Windows.Media.PixelFormats.Pbgra32);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -36,20 +36,20 @@ public static class LiveProbe
             string report = JsonSerializer.Serialize(new
             {
                 tested_utc = DateTimeOffset.UtcNow,
-                model = "gpt-6.1-terra",
+                model = "gpt-6.1-sol",
                 input = ".test-ui/chat-preview.png (own application rendered preview)",
                 desktop_capture = false,
                 result = resultState,
                 error_type = errorType
             }, new JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(Path.Combine(SettingsStore.DataDirectory, "vision-check.json"), report);
-            Console.WriteLine("OpenAI gpt-6.1-terra image input probe: " + resultState + "; rendered application preview only.");
+            Console.WriteLine("OpenAI gpt-6.1-sol image input probe: " + resultState + "; rendered application preview only.");
             return resultState == "pass" ? 0 : 1;
         }
         try
         {
             var result = await ai.ReplyAsync("連線測試。請僅回覆：米亞連線成功。", null, timeout.Token);
-            Console.WriteLine("OpenAI gpt-6.1-terra live reply: " + (!string.IsNullOrWhiteSpace(result) ? "PASS" : "EMPTY"));
+            Console.WriteLine("OpenAI gpt-6.1-sol live reply: " + (!string.IsNullOrWhiteSpace(result) ? "PASS" : "EMPTY"));
         }
         catch (Exception ex) { Console.WriteLine("OpenAI probe: " + SafeError(ex)); }
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };

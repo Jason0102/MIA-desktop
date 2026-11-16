@@ -1,4 +1,4 @@
-using System.Windows.Input;
+﻿using System.Windows.Input;
 using System;
 using System.IO;
 using System.Linq;
@@ -37,7 +37,7 @@ public sealed partial class SettingsWindow : Window
         navigation.Children.Add(Ui.Button("暫停／繼續",()=>app.Pet.Paused=!app.Pet.Paused));
         panel.Children.Add(Ui.Text("變更自動套用 · 右鍵返回對話",13,Ui.Subtle));
         var advanced=new StackPanel { Margin=new Thickness(0,12,0,0) };
-        advanced.Children.Add(Ui.Text("OpenAI API Key · gpt-6.1-terra")); StylePassword(_open); _open.Password=app.Settings.OpenAiKey; advanced.Children.Add(_open);
+        advanced.Children.Add(Ui.Text("OpenAI API Key · gpt-6.1-sol")); StylePassword(_open); _open.Password=app.Settings.OpenAiKey; advanced.Children.Add(_open);
         advanced.Children.Add(Ui.Text("ElevenLabs API Key · Eleven v4")); StylePassword(_eleven); _eleven.Password=app.Settings.ElevenLabsKey; advanced.Children.Add(_eleven);
         advanced.Children.Add(Ui.Button("從金鑰檔案匯入",ImportKeys));
         advanced.Children.Add(Ui.Text("Voice ID（已有聲線可直接填入）")); _voice=Ui.Input(app.Settings.VoiceId); advanced.Children.Add(_voice);
@@ -148,9 +148,9 @@ public sealed partial class SettingsWindow : Window
         RefreshExtensions();
 
         section.Children.Add(Ui.Text("應用程式連線"));
-        section.Children.Add(Ui.Text("Windows 桌面自動操作已停用。OpenAI 與 ElevenLabs 金鑰可在上方的聲線與連線設定管理。", 12, Ui.Subtle));
+        section.Children.Add(Ui.Text("Hermes 可透過 computer use 操作桌面，並以 PowerPoint 檢查工具匯出簡報。需要確認的操作會顯示於工作中心。", 12, Ui.Subtle));
         section.Children.Add(Ui.Text("工作目錄與權限"));
-        section.Children.Add(Ui.Text("檔案工具接受 C 槽來源。通用命令工具已停用。Codex 使用 Windows 工作區沙箱，尚未提供整個 D 槽的讀取隔離。", 12, Ui.Subtle));
+        section.Children.Add(Ui.Text("任務檔案可讀寫 C 槽；新增程式、測試與暫存檔保留於工作目錄。Windows 的受保護目錄仍遵循系統權限。", 12, Ui.Subtle));
         section.Children.Add(Ui.Text(workspace ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MIA Workspace"), 12, Ui.Subtle));
         if (Directory.Exists(workspace))
             section.Children.Add(Ui.Button("開啟工作目錄", () =>

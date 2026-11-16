@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -39,7 +39,7 @@ public sealed partial class ChatWindow
         DockPanel.SetDock(tabs, Dock.Right);
         tabs.Children.Add(_activeTab);
         tabs.Children.Add(_resultsTab);
-        InitializeKanban(tabs);
+        InitializeKanban();
         header.Children.Add(tabs);
         _workHeading.VerticalAlignment = VerticalAlignment.Center;
         _workHeading.Margin = new Thickness(0);
@@ -64,7 +64,7 @@ public sealed partial class ChatWindow
         _resultsPanel.Children.Add(searchBox);
         _resultsPanel.Children.Add(_resultStatus);
         _resultsPanel.Children.Add(_resultList);
-        _workScroll.Content = new Grid { Children = { _activity, _resultsPanel, _kanbanPanel } };
+        _workScroll.Content = new Grid { Children = { _activity, _resultsPanel } };
         _workPanel.Children.Add(_workScroll);
         UpdateResultTabs();
         RefreshResults(migrateLegacy: true);
@@ -87,8 +87,6 @@ public sealed partial class ChatWindow
 
     internal void SelectResults(bool show, string? taskId = null)
     {
-        _showingKanban = false;
-        _kanbanPanel.Visibility = Visibility.Collapsed;
         _showingResults = show;
         _activity.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
         _resultsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
@@ -115,16 +113,12 @@ public sealed partial class ChatWindow
 
     private void UpdateResultTabs()
     {
-        _workHeading.Text = _showingKanban ? "持久工作看板" : _showingResults ? "任務成果" : "進行中任務";
-        _activeTab.Foreground = _showingResults || _showingKanban ? Ui.Subtle : Ui.Gold;
+        _workHeading.Text = _showingResults ? "任務成果" : "進行中任務";
+        _activeTab.Foreground = _showingResults ? Ui.Subtle : Ui.Gold;
         _resultsTab.Foreground = _showingResults ? Ui.Gold : Ui.Subtle;
-        AutomationProperties.SetItemStatus(_activeTab, _showingResults || _showingKanban ? "" : "已選取");
+        AutomationProperties.SetItemStatus(_activeTab, _showingResults ? "" : "已選取");
         AutomationProperties.SetItemStatus(_resultsTab, _showingResults ? "已選取" : "");
-        if (_kanbanTab is not null)
-        {
-            _kanbanTab.Foreground = _showingKanban ? Ui.Gold : Ui.Subtle;
-            AutomationProperties.SetItemStatus(_kanbanTab, _showingKanban ? "已選取" : "");
-        }
+
     }
 
     private void RenderResults()

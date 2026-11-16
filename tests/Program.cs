@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -22,6 +22,15 @@ internal static class Program
         Environment.SetEnvironmentVariable("MIA_DATA_DIR", Path.Combine(scratch, "settings"));
         try
         {
+            foreach (string name in new[] { "附件.docx", "資料.csv", "未知.custom", "無副檔名", "program.exe" })
+            {
+                string path = Path.Combine(scratch, name);
+                File.WriteAllText(path, "attachment fixture; never executed");
+                Check(FileAttachments.Validate(path) == Path.GetFullPath(path), "accept task attachment " + name);
+                File.Delete(path);
+                try { FileAttachments.Validate(path); Check(false, "missing attachment rejected"); }
+                catch (IOException) { Check(true, "missing attachment rejected before send"); }
+            }
             TestCaptureSizing();
             TestCaptureCancellation();
             TestSprites();
@@ -225,7 +234,7 @@ internal static class Program
             using var document = JsonDocument.Parse(body);
             var root = document.RootElement;
             Check(request.RequestUri!.AbsoluteUri == "https://api.openai.com/v1/responses", "AI uses Responses endpoint");
-            Check(root.GetProperty("model").GetString() == "gpt-6.1-terra" && !root.GetProperty("store").GetBoolean(), "requested model retained and provider storage disabled");
+            Check(root.GetProperty("model").GetString() == "gpt-6.1-sol" && !root.GetProperty("store").GetBoolean(), "requested model retained and provider storage disabled");
             if (call++ == 0) Check(body.Contains("data:image/png;base64,"), "current screenshot attached to current request");
             else Check(!body.Contains("data:image/png;base64,"), "old screenshots excluded from subsequent requests");
             return JsonResponse("{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"你好，我是米亞。\"}]}]}");
