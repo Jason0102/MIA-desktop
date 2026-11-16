@@ -28,18 +28,25 @@ public sealed partial class ChatWindow
         job.Status.Text = "待確認";
         RememberTask(job, "待確認");
         _app.ShowChat();
-        question.Actions.Children.Add(Ui.Button("回覆這項詢問", () =>
+        bool approval = control.Kind == "approval.request";
+        if (approval)
         {
-            if (!_pendingQuestions.ContainsKey(question.QuestionId)) return;
-            _answerTarget = question.QuestionId;
-            _status.Text = "正在回覆「" + job.Title + "」；輸入後送出";
-            _input.Focus();
-        }));
-        question.Actions.Children.Add(Ui.Button("取消指定", () => { _answerTarget = null; RefreshJobNotice(); }));
-        if (control.Kind == "approval.request")
+            question.Actions.Children.Add(Ui.Button("不允許", () => Submit("不允許")));
+            if (control.AllowSession) question.Actions.Children.Add(Ui.Button("本次工作階段允許", () => Submit("本次工作階段允許")));
+            if (control.AllowAlways) question.Actions.Children.Add(Ui.Button("始終允許", () => Submit("始終允許")));
+            if (!control.AllowSession && !control.AllowAlways)
+                question.Actions.Children.Add(Ui.Button("允許這一次", () => Submit("允許這一次")));
+        }
+        else
         {
-            question.Actions.Children.Add(Ui.Button("允許這一次", () => Submit("允許這一次")));
-            question.Actions.Children.Add(Ui.Button("拒絕", () => Submit("拒絕")));
+            question.Actions.Children.Add(Ui.Button("回覆這項詢問", () =>
+            {
+                if (!_pendingQuestions.ContainsKey(question.QuestionId)) return;
+                _answerTarget = question.QuestionId;
+                _status.Text = "正在回覆「" + job.Title + "」";
+                _input.Focus();
+            }));
+            question.Actions.Children.Add(Ui.Button("取消指定", () => { _answerTarget = null; RefreshJobNotice(); }));
         }
         RefreshJobNotice();
         _ = AnnounceAsync();
@@ -51,8 +58,9 @@ public sealed partial class ChatWindow
         }
         async Task AnnounceAsync()
         {
-            string text = "[audio: curious]「" + job.Title + "」需要你確認：\n" + control.Text +
-                (control.Kind == "approval.request" ? "\n請回覆「允許這一次」或「拒絕」。" : "\n請直接在對話回答；多項詢問時可先點選「回覆這項詢問」。");
+            string text = approval ? "[audio: curious]" + control.Text
+                : "[audio: curious]「" + job.Title + "」需要你確認。\n" + control.Text +
+                    "\n請直接在對話回答。有多項詢問時，可先點選「回覆這項詢問」。";
             try
             {
                 var presentation = new ReplyPresentation(this, "米亞 · " + job.Title + " · 額外詢問", job.Cancellation.Token);
@@ -72,8 +80,8 @@ public sealed partial class ChatWindow
         { AddMessage("米亞", "這項確認目前只能接收文字，請用文字回答或另開附圖任務。", true); return; }
         bool approval = question.Control.Kind == "approval.request";
         string? response = approval ? ApprovalAnswer.Parse(answer, question.Job.Title) : answer.Trim();
-        if (string.IsNullOrWhiteSpace(response))
-        { AddMessage("米亞 · " + question.Job.Title, "尚未核准。請明確回覆「允許這一次」或「拒絕」，也可以點選按鈕。", true); return; }
+        if (string.IsNullOrWhiteSpace(response) || approval && !CanChooseApproval(question.Control, response))
+        { AddMessage("米亞 · " + question.Job.Title, "請選擇這項詢問提供的選項。", true); return; }
         question.Sending = true;
         question.Actions.IsEnabled = false;
         try
@@ -97,6 +105,15 @@ public sealed partial class ChatWindow
             }
         }
     }
+
+    private static bool CanChooseApproval(HermesControl control, string response) => response switch
+    {
+        "deny" => true,
+        "session" => control.AllowSession,
+        "always" => control.AllowAlways,
+        "once" => !control.AllowSession && !control.AllowAlways,
+        _ => false
+    };
 
     private void CloseQuestion(PendingQuestion question, string status)
     {
@@ -135,7 +152,8 @@ public sealed partial class ChatWindow
         var first = _pendingQuestions.Values.Single();
         ((Button)first.Actions.Children[0]).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         checks["reply_button_selects_exact_question"] = _answerTarget == first.QuestionId;
-        var secondControl = new HermesControl("v1/runs/test", "approval.request", "question-two", 1, "是否允許這項操作？");
+        var secondControl = new HermesControl("v1/runs/test", "approval.request", "question-two", 1, "我想在視窗裡輸入文字，可以嗎？",
+            AllowSession: true, AllowAlways: true);
         AddJobControl(job, secondControl);
         await UpdateJobAsync(job, new HermesUpdate("message.delta", "progress"));
         checks["progress_preserves_waiting"] = job.Status.Text == "待確認";
@@ -143,7 +161,13 @@ public sealed partial class ChatWindow
         checks["other_question_remains_waiting"] = job.WaitingForAnswer && _pendingQuestions.Count == 1;
         checks["answered_selection_cleared"] = _answerTarget is null;
         var second = _pendingQuestions.Values.Single();
-        checks["approval_buttons_in_chat"] = second.Actions.Children.OfType<Button>().Count() == 4;
+        checks["approval_buttons_in_chat"] = second.Actions.Children.OfType<Button>().Select(b => b.Content as string)
+            .SequenceEqual(new[] { "不允許", "本次工作階段允許", "始終允許" });
+        AddJobControl(job, secondControl with { RequestId = "question-three", AllowSession = false, AllowAlways = false });
+        var restricted = _pendingQuestions.Values.Single(q => q != second);
+        checks["once_only_approval_buttons"] = restricted.Actions.Children.OfType<Button>().Select(b => b.Content as string)
+            .SequenceEqual(new[] { "不允許", "允許這一次" });
+        CloseQuestion(restricted, "詢問已結束");
         job.Cancellation.Cancel();
         CloseQuestion(second, "詢問已結束");
         checks["ended_questions_cannot_receive_answers"] = _pendingQuestions.Count == 0 && !second.Actions.IsEnabled;

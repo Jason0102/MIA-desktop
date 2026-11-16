@@ -10,6 +10,8 @@ internal static class ApprovalAnswer
         return value.TrimEnd('。', '！', '!', '.', ' ') switch
         {
             "允許這一次" or "允許" or "同意" or "核准" => "once",
+            "本次工作階段允許" => "session",
+            "始終允許" => "always",
             "拒絕" or "不允許" or "不同意" or "不要執行" => "deny",
             _ => null
         };

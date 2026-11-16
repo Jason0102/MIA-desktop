@@ -12,7 +12,8 @@ from .webhook_events import register_webhook
 from .isolated_code import block_native_code, registration as code_registration
 from .work_cards import registration as cards_registration
 from .templates import registration as templates_registration
-from .desktop_tools import computer_registration, powerpoint_registration
+from .desktop_tools import computer_registration, powerpoint_registration, note_registration
+from .permissions import install_policy, guard_delegated_operation
 
 
 def calendar_workflow(_args, **_kwargs):
@@ -27,9 +28,11 @@ def calendar_workflow(_args, **_kwargs):
 
 
 def register(ctx):
+    install_policy()
     ctx.register_tool(**cards_registration())
     ctx.register_tool(**templates_registration())
     ctx.register_tool(**computer_registration())
+    ctx.register_tool(**note_registration())
     ctx.register_tool(**powerpoint_registration())
     ctx.register_tool(**registration())
     ctx.register_tool(**extension_registration())
@@ -48,5 +51,6 @@ def register(ctx):
     register_scheduled_tasks(ctx)
     register_webhook(ctx)
     ctx.register_hook("pre_tool_call", block_native_code)
+    ctx.register_hook("pre_tool_call", guard_delegated_operation)
     if os.environ.get("MIA_ISOLATED_CODE") == "1":
         ctx.register_tool(**code_registration())

@@ -8,21 +8,74 @@ import threading
 import uuid
 
 from .bridge import local_c_path
+from .permissions import add_operation_fields, check_operation
 
 _OFFICE_LOCK = threading.Lock()
 
 
 def computer_registration():
+    from tools.computer_use import cua_backend_parse
     from tools.computer_use.schema import COMPUTER_USE_SCHEMA
     from tools.computer_use.tool import handle_computer_use
+    # The pinned Hermes parser only lists macOS/Linux modifiers.
+    cua_backend_parse._MODIFIER_NAMES |= {"win"}
+    cua_backend_parse._KEY_ALIASES.update(windows="win", super="win", meta="win")
     schema = copy.deepcopy(COMPUTER_USE_SCHEMA)
     schema["name"] = "mia_computer_use"
+    add_operation_fields(schema)
 
     def handle(args, **kwargs):
-        # Keep native session isolation, interrupt handling and approval events.
-        return handle_computer_use(args, **kwargs)
+        error = check_operation("mia_computer_use", args)
+        if error:
+            return json.dumps({"error": error}, ensure_ascii=False)
+        return handle_computer_use(normalize_computer_args(args), **kwargs)
 
     return {"name": schema["name"], "toolset": "mia_codex", "schema": schema, "handler": handle}
+
+
+def normalize_computer_args(args):
+    args = {key: value for key, value in args.items() if key not in {"operation_kind", "operation_target"}}
+    if args.get("action") == "key" and args.get("modifiers"):
+        parts = str(args.get("keys", "")).split("+")
+        modifiers = [value for value in args.pop("modifiers") if value.casefold() not in {part.casefold() for part in parts}]
+        args["keys"] = "+".join([*modifiers, *parts])
+    return args
+
+
+def desktop_note(args, **_kwargs):
+    import ctypes
+
+    text = args.get("text")
+    if not isinstance(text, str) or not text.strip() or len(text) > 4000:
+        return json.dumps({"error": "Supply 1–4000 characters of note text."})
+    try:
+        desktop = ctypes.create_unicode_buffer(32768)
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 0x10, None, 0, desktop) != 0:
+            raise OSError("Windows did not return the Desktop folder")
+        folder = local_c_path(desktop.value)
+        path = folder / ("米亞的貼心提醒-" + uuid.uuid4().hex[:12] + ".txt")
+        with path.open("x", encoding="utf-8-sig") as output:
+            output.write(text.strip() + "\n")
+        if path.read_text(encoding="utf-8-sig") != text.strip() + "\n":
+            raise OSError("Note verification failed")
+        notepad = Path(os.environ["SystemRoot"]) / "System32/notepad.exe"
+        subprocess.Popen([str(notepad), str(path)], creationflags=subprocess.CREATE_NO_WINDOW)
+        return json.dumps({"status": "saved_open_requested", "path": str(path),
+                           "next": "Capture Notepad with mia_computer_use and verify that the note is visible."}, ensure_ascii=False)
+    except (ValueError, OSError) as error:
+        return json.dumps({"error": str(error)}, ensure_ascii=False)
+
+
+def note_registration():
+    return {
+        "name": "mia_desktop_note", "toolset": "mia_codex", "handler": desktop_note,
+        "schema": {
+            "name": "mia_desktop_note",
+            "description": "Create a new UTF-8 text note on the Windows Desktop and open it in Notepad. Use when Sticky Notes is unavailable or cannot be operated after two attempts. Verify visibility with computer use before reporting completion.",
+            "parameters": {"type": "object", "properties": {"text": {"type": "string", "maxLength": 4000}},
+                           "required": ["text"], "additionalProperties": False},
+        },
+    }
 
 
 def powerpoint(args, **_kwargs):

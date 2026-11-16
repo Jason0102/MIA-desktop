@@ -12,7 +12,7 @@ public sealed partial class ChatWindow
         var checks = new Dictionary<string, bool>();
         bool muted = _app.Settings.Muted;
         string voiceId = _app.Settings.VoiceId;
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var ct = deadline.Token;
         try
         {
@@ -78,6 +78,27 @@ public sealed partial class ChatWindow
             checks["sentence_emotions_reach_pet"] = emotions.Contains("happy") && emotions.Contains("curious");
             checks["full_reply_kept_without_tags_or_duplicates"] = spoken.VisibleText == SpeechTags.Display(final) && requests == 2;
             checks["audio_end_restores_act008"] = !voice.IsSpeaking && _app.Pet.CurrentAnimation == "thinking";
+
+            _app.Settings.VoiceId = "";
+            using var localVoice = new VoiceService(new AppSettings(), handler);
+            bool localStarted = false;
+            localVoice.SpeakingChanged += speakingNow => localStarted |= speakingNow;
+            var localReply = new ReplyPresentation(this, "米亞", ct, voice: localVoice);
+            await localReply.CompleteAsync("米亞語音測試。");
+            checks["missing_cloud_credentials_show_text_without_audio"] =
+                !localStarted && !localVoice.IsSpeaking && localReply.VoiceError is not null &&
+                localReply.VisibleText == "米亞語音測試。" && requests == 2;
+
+            using var rejectedHandler = new ReplyAudioHandler((_, _) =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)));
+            using var rejectedVoice = new VoiceService(new AppSettings { ElevenLabsKey = "synthetic", VoiceId = "synthetic" }, rejectedHandler);
+            bool rejectedStarted = false;
+            rejectedVoice.SpeakingChanged += speakingNow => rejectedStarted |= speakingNow;
+            var rejectedReply = new ReplyPresentation(this, "米亞", ct, voice: rejectedVoice);
+            await rejectedReply.CompleteAsync("語音測試。");
+            checks["rejected_cloud_key_shows_text_without_audio"] =
+                !rejectedStarted && !rejectedVoice.IsSpeaking && rejectedReply.VoiceError is not null &&
+                rejectedReply.VisibleText == "語音測試。";
 
             _app.Settings.Muted = true;
             var disabled = new ReplyPresentation(this, "米亞", ct, voice: voice);

@@ -42,6 +42,8 @@ internal static class HermesChecks
             string path = request.RequestUri!.AbsolutePath;
             if (path == "/api/sessions/" + session && request.Method == HttpMethod.Delete)
             {
+                check(request.Headers.TryGetValues("X-MIA-Memory-Reset", out var resetHeaders) &&
+                    resetHeaders.SequenceEqual(new[] { "1" }), "memory reset explicitly permits recovery of a lost run");
                 sessionDeleted = true;
                 return Json("{}");
             }
@@ -64,7 +66,7 @@ internal static class HermesChecks
                     data: {"event":"tool.started","tool":"mia_codex_run"}
 
                     id: 2
-                    data: {"event":"approval.request","prompt_id":"check-approval","execution_generation":3,"description":"Review requested operation"}
+                    data: {"event":"approval.request","prompt_id":"check-approval","execution_generation":3,"description":"Allow computer_use to perform `type`?","command":"computer_use: type 'Sticky note' [FOREGROUND — briefly raises the window / changes focus]","choices":["once","session","always","deny"]}
 
                     id: 3
                     data: {"event":"message.delta","delta":"Progress only"}
@@ -80,7 +82,7 @@ internal static class HermesChecks
                 using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
                 var root = body.RootElement;
                 check(root.GetProperty("request_id").GetString() == "check-approval" && root.GetProperty("execution_generation").GetInt32() == 3
-                    && root.GetProperty("choice").GetString() == "once", "Hermes controls use the exact request and run generation");
+                    && root.GetProperty("choice").GetString() == "session", "Hermes controls use the selected scope and exact request and run generation");
                 return Json("{}");
             }
             if (path == "/v1/runs/run_check/stop")
@@ -95,7 +97,13 @@ internal static class HermesChecks
         string output = await service.ReplyAsync("Make a local report", Array.Empty<byte[]>(), CancellationToken.None, async update =>
         {
             updates.Add(update);
-            if (update.Control is { } control) await service.RespondAsync(control, "once", CancellationToken.None);
+            if (update.Control is { } control)
+            {
+                check(control.AllowSession && control.AllowAlways &&
+                    control.Text == "我想把視窗切到前面，再在視窗裡輸入文字，可以嗎？",
+                    "Hermes approval preserves available scopes and describes the desktop action without raw arguments");
+                await service.RespondAsync(control, "session", CancellationToken.None);
+            }
         });
         check(output == "Codex returned the final result" && updates.Count(update => update.Tool == "mia_codex_run") == 2,
             "Hermes surfaces Codex tool events and recovers the canonical result after stream disconnect");

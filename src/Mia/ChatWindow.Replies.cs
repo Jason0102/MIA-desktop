@@ -40,7 +40,7 @@ public sealed partial class ChatWindow
             this.readUrls = readUrls;
             this.voice = voice ?? owner._app.Voice;
             this.results = results;
-            audio = !owner._app.Settings.Muted && !string.IsNullOrWhiteSpace(owner._app.Settings.VoiceId);
+            audio = !owner._app.Settings.Muted;
             playback = audio ? PlayAsync() : Task.CompletedTask;
         }
 
@@ -95,6 +95,9 @@ public sealed partial class ChatWindow
                     EnsureBody();
                     body!.Text = SpeechTags.Display(final);
                     AddSourceLinks(body, final);
+                    if (VoiceError is { } note &&
+                        body.Parent is StackPanel panel)
+                        panel.Children.Add(Ui.Text(note, 12, Ui.Subtle));
                     owner._scroll.ScrollToEnd();
                 }
                 if (textAnimationStarted is long start)

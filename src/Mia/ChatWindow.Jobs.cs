@@ -179,7 +179,7 @@ public sealed partial class ChatWindow
                 {
                     if (questions.Length > 1 && (!prompt.Contains(question.Job.Title, StringComparison.Ordinal) ||
                         questions.Count(q => q.Job.Title == question.Job.Title) > 1))
-                        message = "[audio: curious]有多項待確認詢問，請先點選要回覆的那一項，再輸入答案。";
+                        message = "[audio: curious]有多項詢問在等你回覆。請直接點選授權選項，或選「回覆這項詢問」後輸入答案。";
                     else startWork = () => AnswerQuestionAsync(question.QuestionId, prompt, images.Length > 0);
                 }
                 else if (action == "chat")

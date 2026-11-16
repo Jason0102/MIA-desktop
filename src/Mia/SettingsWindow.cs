@@ -256,7 +256,13 @@ public sealed partial class SettingsWindow : Window
         {
             Save(); if(_app.Settings.Muted) { _status.Text="請先開啟語音生成，再試聽。"; return; }
             using var session=new CancellationTokenSource(); _work=session;
-            try { _status.Text="正在生成與播放…"; await _app.Voice.SpeakAsync("嗨，我是米亞。今天也一起找出有趣的線索吧！",session.Token); if(!session.IsCancellationRequested&&!_closed&&!_app.IsExiting)_status.Text="試聽結束。"; }
+            try
+            {
+                _status.Text = "正在生成與播放…";
+                await _app.Voice.SpeakAsync("嗨，我是米亞。今天也一起找出有趣的線索吧！", session.Token);
+                if (!session.IsCancellationRequested && !_closed && !_app.IsExiting)
+                    _status.Text = "ElevenLabs 試聽結束。";
+            }
             finally { if(ReferenceEquals(_work,session))_work=null; }
         }
         catch(OperationCanceledException) { if(!_closed&&!_app.IsExiting)_status.Text="已停止。"; }
@@ -286,7 +292,7 @@ internal static class StartupRegistration
             if(string.IsNullOrWhiteSpace(launcher) || !Path.IsPathFullyQualified(launcher) || !File.Exists(launcher))
                 throw new InvalidOperationException("請使用 3.2 的啟動捷徑，再啟用登入時自動啟動。");
             string powershell=Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe");
-            command=$"\"{powershell}\" -NoProfile -WindowStyle Hidden -File \"{launcher}\"";
+            command=$"\"{powershell}\" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{launcher}\"";
         }
         using var key=Registry.CurrentUser.CreateSubKey(Key);
         key.SetValue(Name,command);

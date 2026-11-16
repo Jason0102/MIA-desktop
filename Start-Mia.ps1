@@ -136,6 +136,15 @@ try {
         $env:OPENAI_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
         Remove-Variable secret
     }
+    $localKeyFile = Join-Path $PSScriptRoot 'api_key'
+    if (-not $env:OPENAI_API_KEY -and (Test-Path -LiteralPath $localKeyFile -PathType Leaf)) {
+        $key = [regex]::Match([IO.File]::ReadAllText($localKeyFile), '(?m)\bsk-[A-Za-z0-9_-]{12,}\b')
+        if ($key.Success) {
+            $env:OPENAI_API_KEY = $key.Value
+            if (-not $Model) { $Model = 'gpt-6.1-sol' }
+        }
+        Remove-Variable key
+    }
 
     $prefix = Join-Path $runtime 'bin/codex.exe'
     $codex = if ($CodexPath) { (Resolve-Path -LiteralPath $CodexPath).Path }
@@ -160,7 +169,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'integration/hermes/SOUL.md') -Destination $soul
     }
     $plugin = Join-Path $homePath 'plugins/mia-codex'
-    foreach ($name in @('plugin.yaml','__init__.py','bridge.py','extensions.py','history.py','browser_tools.py','scheduled_tasks.py','webhook_events.py','isolated_code.py','work_cards.py','templates.py','desktop_tools.py','powerpoint.ps1')) {
+    foreach ($name in @('plugin.yaml','__init__.py','bridge.py','extensions.py','history.py','browser_tools.py','scheduled_tasks.py','webhook_events.py','isolated_code.py','work_cards.py','templates.py','desktop_tools.py','permissions.py','powerpoint.ps1')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot "integration/hermes/mia-codex/$name") -Destination $plugin
     }
     $calendarSkill = Join-Path $homePath 'skills/mia-calendar'

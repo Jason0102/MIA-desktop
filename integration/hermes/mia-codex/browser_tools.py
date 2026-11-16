@@ -7,6 +7,7 @@ from pathlib import Path
 import time
 from urllib.parse import urlsplit
 from uuid import uuid4
+from .permissions import add_operation_fields, check_operation
 
 
 def _text(value, label, limit=2048, *, empty=False):
@@ -69,6 +70,9 @@ def handle(args, **kwargs):
     from tools.registry import tool_error
 
     try:
+        error = check_operation("mia_browser", args)
+        if error:
+            return tool_error(error)
         scope = kwargs.get("task_id")
         if not scope:
             return tool_error("Browser actions require a MIA conversation")
@@ -101,7 +105,7 @@ def handle(args, **kwargs):
 
 
 def registration():
-    return {
+    result = {
         "name": "mia_browser", "toolset": "mia_codex", "handler": handle,
         "schema": {
             "name": "mia_browser",
@@ -117,3 +121,5 @@ def registration():
             },
         },
     }
+    add_operation_fields(result["schema"])
+    return result

@@ -230,13 +230,18 @@ public sealed partial class PetWindow : Window
         lastTouch=p;
     }
     private void PetHead(){MarkInteraction();pettedAt=DateTime.UtcNow;touchCooldown=pettedAt.AddSeconds(2);}
+    private void TouchCharacter(Point position)
+    {
+        if(position.Y<Height*.48 || (perch!=IntPtr.Zero&&perchSeated))PetHead();
+        else SetMood("happy");
+    }
     private void OnUp(object sender,MouseButtonEventArgs e)
     {
         if(!dragging)return;
         if(!dragMoved)
         {
             dragging=false;dockCandidate=null;dockHint?.Hide();ReleaseMouseCapture();
-            if(e.GetPosition(sprite).Y<Height*.48)PetHead();else SetMood("happy");
+            TouchCharacter(e.GetPosition(sprite));
         }
         else {ReleaseDrag();ReleaseMouseCapture();}
         e.Handled=true;
@@ -514,7 +519,7 @@ public sealed partial class PetWindow : Window
         else if(!grounded&&!dragging)pose=velocityY<0?"jump-up":"falling";
         else if(speaking)pose="speaking";
         else if(WorkingInCompanion)pose="thinking";
-        else if(perch!=IntPtr.Zero&&perchSeated)pose="perched";
+        else if(perch!=IntPtr.Zero&&perchSeated)pose=(now-pettedAt).TotalSeconds<1.5?"perched-petting":"perched";
         else if((now-landingAt).TotalSeconds<.4)pose="landing";
         else if((now-pettedAt).TotalSeconds<1.5)pose="petting";
         else if(speaking)pose="speaking";
@@ -535,6 +540,8 @@ public sealed partial class PetWindow : Window
         if(CurrentAnimation!=pose){if(LocomotionRules.IsWalk(pose)&&!LocomotionRules.IsWalk(CurrentAnimation))walkingDistance=0;CurrentAnimation=pose;animationStarted=now;}
         double seconds=Paused?0:(now-animationStarted).TotalSeconds;
         string art=LocomotionRules.IsWalk(pose)?"walking":pose=="resting"?"petting":pose;
+        // Keep the seated artwork and contact anchor while animating a touch response.
+        if(pose=="perched-petting")art="perched";
         if(pose=="kicking" && (now-kickStarted).TotalSeconds<.12)art="listening";
         if(pose=="tapping")art=seconds<.15?"landing":"pawing";
         if(pose=="pouncing")art=seconds<.65?"landing":"pounce";
@@ -596,7 +603,17 @@ public sealed partial class PetWindow : Window
         }
         if(CurrentAnimation=="resting")sy=.96+Math.Sin(now.TimeOfDay.TotalSeconds*1.4)*.015;
         if(dragging&&dragMoved){tilt=Math.Clamp(-velocityX*.025,-6,6)+Math.Sin(now.TimeOfDay.TotalSeconds*5)*1.2;sx=.97;sy=1.02;}
-        else if(CurrentAnimation=="perched"){sy=1+Math.Sin(now.TimeOfDay.TotalSeconds*2.5)*.008;tilt=Math.Sin(now.TimeOfDay.TotalSeconds*1.5)*.7;}
+        else if(CurrentAnimation is "perched" or "perched-petting")
+        {
+            sy=1+Math.Sin(now.TimeOfDay.TotalSeconds*2.5)*.008;tilt=Math.Sin(now.TimeOfDay.TotalSeconds*1.5)*.7;
+            if(CurrentAnimation=="perched-petting")
+            {
+                double progress=Math.Clamp((now-pettedAt).TotalSeconds/1.5,0,1);
+                double envelope=Math.Sin(progress*Math.PI);
+                tilt+=4*Math.Sin(progress*Math.PI*2)*envelope;
+                sy-=.025*envelope; sx+=.012*envelope;
+            }
+        }
         else
         {
             double impact=(now-landingAt).TotalSeconds;if(impact>=0&&impact<.36){double pulse=Math.Sin(impact/.36*Math.PI);sx=1+.045*pulse;sy=1-.10*pulse;}
@@ -606,7 +623,7 @@ public sealed partial class PetWindow : Window
             {double progress=Math.Clamp((now-animationStarted).TotalSeconds/2,0,1);sy+=Math.Sin(progress*Math.PI)*.018;tilt=Math.Sin(progress*Math.PI*2)*1.4;}
         }
         double blend=Math.Min(1,dt*14);expressionScale.ScaleX+=(sx-expressionScale.ScaleX)*blend;expressionScale.ScaleY+=(sy-expressionScale.ScaleY)*blend;expressionTilt.Angle+=(tilt-expressionTilt.Angle)*blend;
-        sprite.RenderTransformOrigin=new Point(.5,perch!=IntPtr.Zero&&perchSeated&&CurrentAnimation=="perched"?(animations.Get("perched")?.AnchorY??203)/208:.94);
+        sprite.RenderTransformOrigin=new Point(.5,perch!=IntPtr.Zero&&perchSeated&&(CurrentAnimation is "perched" or "perched-petting")?(animations.Get("perched")?.AnchorY??203)/208:.94);
     }
     private IntPtr WindowHook(IntPtr handle,int message,IntPtr wParam,IntPtr lParam,ref bool handled)
     {

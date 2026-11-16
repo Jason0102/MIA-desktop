@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Input;
 using Mia;
 using Size = System.Windows.Size;
+using Point = System.Windows.Point;
 
 internal static class InteractionChecks
 {
@@ -186,7 +187,45 @@ internal static class InteractionChecks
             pointType.GetField("X")!.SetValue(point,0);
             Baseline();Set("perch",new IntPtr(1));Set("perchSeated",false);Set("velocityX",80d);Select();
             check(pet.CurrentAnimation=="walk-right","standing on a window uses walking instead of seated artwork");
-            Set("perchSeated",true);Select();check(pet.CurrentAnimation=="perched","manual seated contact retains sitting pose");
+            var touch=type.GetMethod("TouchCharacter",BindingFlags.Instance|BindingFlags.NonPublic)!;
+            var petHead=type.GetMethod("PetHead",BindingFlags.Instance|BindingFlags.NonPublic)!;
+            var expression=type.GetMethod("UpdateExpression",BindingFlags.Instance|BindingFlags.NonPublic)!;
+            Baseline();Set("perch",new IntPtr(1));Select();
+            var seatedFrame=type.GetField("currentFrame",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(pet);
+            petHead.Invoke(pet,null);Select();
+            check(pet.CurrentAnimation=="perched-petting","stroking the head while seated starts the seated touch animation");
+            check(ReferenceEquals(seatedFrame,type.GetField("currentFrame",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(pet)),"seated touch retains seated artwork instead of standing up");
+            foreach(double scale in new[]{.5,1,3})
+            {
+                pet.Height=208*scale;pet.Width=192*scale;
+                Set("pettedAt",DateTime.MinValue);touch.Invoke(pet,new object[]{new Point(96*scale,60*scale)});Select();
+                check(pet.CurrentAnimation=="perched-petting","seated head click reacts at scale "+scale);
+                Set("pettedAt",DateTime.MinValue);touch.Invoke(pet,new object[]{new Point(96*scale,160*scale)});Select();
+                check(pet.CurrentAnimation=="perched-petting","seated body click reacts at scale "+scale);
+            }
+            pet.Height=208;pet.Width=192;
+            var touchStart=(DateTime)type.GetField("pettedAt",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(pet)!;
+            var reactionTime=touchStart.AddSeconds(.375);
+            expression.Invoke(pet,new object[]{reactionTime,1d});
+            var reactionSprite=(System.Windows.Controls.Image)type.GetField("sprite",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(pet)!;
+            var reactionTilt=(System.Windows.Media.RotateTransform)type.GetField("expressionTilt",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(pet)!;
+            var reactionScale=(System.Windows.Media.ScaleTransform)type.GetField("expressionScale",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(pet)!;
+            check(Math.Abs(reactionTilt.Angle)>2&&reactionScale.ScaleY<1,"seated touch visibly sways and nods during playback");
+            check(Math.Abs(reactionSprite.RenderTransformOrigin.Y-145d/208)<.0001&&pet.IsDocked,"touch pivots at the seat and retains docking");
+            check((double)type.GetMethod("PerchAnchor",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(pet,new object[]{208d})! ==145,"seated touch keeps the same physical window contact height");
+            select.Invoke(pet,new object[]{touchStart.AddSeconds(1.5),point,192d,208d});
+            check(pet.CurrentAnimation=="perched"&&pet.IsDocked,"touch ends after 1.5 seconds and restores the seated idle");
+            petHead.Invoke(pet,null);pet.SetSpeaking(true);Select();
+            check(pet.CurrentAnimation=="speaking","speech still overrides seated touch");
+            pet.SetSpeaking(false);Set("grounded",false);Select();
+            check(pet.CurrentAnimation=="falling","loss of support overrides seated touch");
+            Set("dragging",true);Set("dragMoved",true);Select();
+            check(pet.CurrentAnimation=="carried","dragging overrides seated touch");
+            Baseline();touch.Invoke(pet,new object[]{new Point(96,60)});Select();
+            check(pet.CurrentAnimation=="petting","standing head click retains its existing touch animation");
+            Baseline();touch.Invoke(pet,new object[]{new Point(96,160)});Select();
+            check(pet.CurrentAnimation=="happy","standing body click retains its happy response");
+            Baseline();Set("perch",new IntPtr(1));Select();check(pet.CurrentAnimation=="perched","manual seated contact retains sitting pose");
             Baseline();Set("grounded",false);Set("velocityY",-300d);Select();check(pet.CurrentAnimation=="jump-up","ascending hop has dedicated jump pose");
             Set("velocityY",100d);Select();check(pet.CurrentAnimation=="falling","jump descent transitions to falling artwork");
             Baseline();Set("idleAction","yawn");Set("idleStarted",DateTime.UtcNow.AddSeconds(-1));Set("idleUntil",DateTime.UtcNow.AddSeconds(3));Select();
@@ -226,6 +265,7 @@ internal static class InteractionChecks
             check(pet.CurrentAnimation=="speaking","tagged speech overrides the seated pose");
             var speechAnchor=(double)type.GetMethod("PerchAnchor",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(pet,new object[]{208d})!;
             check(speechAnchor==203,"emotion speech feet remain on the window edge");
+            Set("pettedAt",DateTime.MinValue);
             pet.SetSpeaking(false);Select();
             check(pet.CurrentAnimation=="perched","speech stop restores seated pose");
             Set("grounded",false);Select();

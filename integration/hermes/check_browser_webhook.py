@@ -61,7 +61,7 @@ def browser_check():
     task = "mia-browser-fixture"
 
     def action(kind, **args):
-        value = json.loads(handle({"action": kind, **args}, task_id=task))
+        value = json.loads(handle({"action": kind, "operation_kind": "ordinary", "operation_target": "Local test page", **args}, task_id=task))
         assert value.get("success"), value
         return value
 

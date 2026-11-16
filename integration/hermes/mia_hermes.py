@@ -35,4 +35,12 @@ if __name__ == "__main__":
             raise SystemExit("Could not update MCP server")
         print(f"{name}: {action}d")
     else:
+        if sys.argv[1:3] == ["gateway", "run"]:
+            from pathlib import Path
+
+            # Isolated Python omits the entry script's directory from sys.path.
+            sys.path.append(str(Path(__file__).resolve().parent))
+            from mia_session_cleanup import install
+
+            install()
         main()

@@ -51,15 +51,17 @@ public sealed partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        _mutex = new Mutex(true, InstanceName, out bool first);
+        string instance = e.Args.Contains("--reply-self-test") ? InstanceName + ".ReplyCheck"
+            : e.Args.Contains("--questions-self-test") ? InstanceName + ".QuestionsCheck" : InstanceName;
+        _mutex = new Mutex(true, instance, out bool first);
         if (!first)
         {
-            try { using var wake=EventWaitHandle.OpenExisting(InstanceName + ".Wake"); wake.Set(); } catch (WaitHandleCannotBeOpenedException) { }
+            try { using var wake=EventWaitHandle.OpenExisting(instance + ".Wake"); wake.Set(); } catch (WaitHandleCannotBeOpenedException) { }
             Shutdown(); return;
         }
-        _wake = new EventWaitHandle(false, EventResetMode.AutoReset, InstanceName + ".Wake");
+        _wake = new EventWaitHandle(false, EventResetMode.AutoReset, instance + ".Wake");
         _wakeWait = ThreadPool.RegisterWaitForSingleObject(_wake, (_,_) => Dispatcher.BeginInvoke(new Action(Recall)), null, -1, false);
-        _exitSignal=new EventWaitHandle(false,EventResetMode.AutoReset,InstanceName + ".Exit");
+        _exitSignal=new EventWaitHandle(false,EventResetMode.AutoReset,instance + ".Exit");
         _exitWait=ThreadPool.RegisterWaitForSingleObject(_exitSignal,(_,_)=>Dispatcher.BeginInvoke(new Action(ExitApp)),null,-1,false);
         DispatcherUnhandledException += (_,a) => {
             MessageBox.Show("米亞遇到問題，請重新啟動。\n"+a.Exception.GetType().Name, "MIA", MessageBoxButton.OK, MessageBoxImage.Error);

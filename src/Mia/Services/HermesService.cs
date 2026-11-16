@@ -9,7 +9,7 @@ using System.Text.Json;
 
 namespace Mia.Services;
 
-public sealed record HermesControl(string RunId, string Kind, string RequestId, int? Generation, string Text);
+public sealed record HermesControl(string RunId, string Kind, string RequestId, int? Generation, string Text, bool AllowSession = false, bool AllowAlways = false);
 public sealed record HermesUpdate(string Event, string Text = "", string Tool = "", HermesControl? Control = null);
 
 public sealed class HermesService : IDisposable
@@ -95,7 +95,14 @@ public sealed class HermesService : IDisposable
             只在工具有可驗證的結果時宣告完成。
             使用者已開放任務相關的 C 槽檔案讀寫與軟體調用；新增程式、測試與暫存檔留在工作目錄。
             重用模板先查 mia_templates；需保存時用 save 確認寫入。PowerPoint 視覺驗證在 Codex 產檔後呼叫 mia_powerpoint_check 並檢視匯出圖片。
-            桌面軟體由 mia_computer_use 觀察及操作，工具仍保留審批與中斷。不要因 Codex 沙箱無法開啟 Office 就停止整個委託。
+            桌面軟體由 mia_computer_use 觀察及操作。一般操作已始終允許，只有刪除檔案或登入帳號需授權。
+            桌面與瀏覽器操作必須依實際效果填入 operation_kind 和 operation_target。
+            刪除檔案含移至資源回收筒，登入含輸入帳號密碼、驗證碼或送出登入，必須正確分類並等待工具授權。
+            不要因 Codex 沙箱無法開啟 Office 就停止整個委託。
+            桌面快捷鍵請把完整組合放在 keys，例如 win+r、ctrl+l。全螢幕截圖後應先擷取目標應用程式再操作。
+            簡單便條紙優先使用現有便箋程式，若找不到或連續兩次未成功，直接使用 mia_desktop_note 建立並開啟桌面文字便條。
+            不要為讀取畫面元素清單委派 Codex。工具傳回失敗時依原因更換方式，不要反覆重送無效操作。
+            mia_desktop_note 回傳後用 mia_computer_use 擷取記事本確認內容可見，再回報完成。
             委派 Codex 時必須按該步驟需求設定 reasoning_effort：簡單格式調整或明確的小修改用 low，一般文件與實作用 medium，複雜除錯、多步分析、跨檔重構或高度不確定工作用 high。不要只按字數判斷；使用者明確指定時優先遵從。
             修改既有 Codex 成果時，將先前工具返回的 job_id 填入 mia_codex_run 的 resume_job，接續原工作目錄。
             使用者要求驗證米亞的擴充安裝時，使用 mia_install_extension 並回報工具實際返回的狀態及驗證標記。
@@ -291,9 +298,12 @@ public sealed class HermesService : IDisposable
             string requestId = GetString(item, "prompt_id");
             if (requestId.Length == 0) requestId = GetString(item, "request_id");
             int? generation = item.TryGetProperty("execution_generation", out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int n) ? n : null;
-            string[] fields = kind == "clarify.request" ? new[] { "question", "text" } : new[] { "description", "command", "title" };
-            string text = string.Join("\n", fields.Select(field => GetString(item, field)).Where(s => s.Length > 0).Distinct());
-            return new(kind, Control: new(runPath, kind, requestId, generation, text));
+            string text = kind == "approval.request"
+                ? ApprovalPrompt.Describe(GetString(item, "command"), GetString(item, "description"))
+                : string.Join("\n", new[] { "question", "text" }.Select(field => GetString(item, field)).Where(s => s.Length > 0).Distinct());
+            bool Allows(string choice) => item.TryGetProperty("choices", out var choices) &&
+                choices.ValueKind == JsonValueKind.Array && choices.EnumerateArray().Any(c => c.ValueKind == JsonValueKind.String && c.GetString() == choice);
+            return new(kind, Control: new(runPath, kind, requestId, generation, text, Allows("session"), Allows("always")));
         }
         if (kind == "tool.completed" && item.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.True)
             kind = "tool.failed";
@@ -305,7 +315,8 @@ public sealed class HermesService : IDisposable
         bool clarify = control.Kind == "clarify.request";
         if (clarify && (control.Generation is null || control.RequestId.Length == 0))
             throw new InvalidOperationException("目前 Hermes 版本未提供這筆補充問題的回覆識別資訊。");
-        if (!clarify && answer is not ("once" or "deny")) throw new ArgumentException("請選擇單次允許或拒絕。");
+        if (!clarify && !(answer is "once" or "deny" || answer == "session" && control.AllowSession || answer == "always" && control.AllowAlways))
+            throw new ArgumentException("請選擇這項詢問提供的授權選項。");
 
         var body = new Dictionary<string, object> { [clarify ? "answer" : "choice"] = answer };
         if (control.RequestId.Length > 0) body["request_id"] = control.RequestId;
@@ -372,7 +383,10 @@ public sealed class HermesService : IDisposable
     {
         if (id.Length == 0) throw new IOException("Hermes 回傳無效的會話識別碼。");
         using var request = Request(HttpMethod.Delete, "api/sessions/" + Uri.EscapeDataString(id));
+        request.Headers.Add("X-MIA-Memory-Reset", "1");
         using var response = await _http.SendAsync(request);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+            throw new IOException("Hermes 還有執行中或待處理的工作。請先停止或處理這些工作，再清除記憶。");
         if (response.StatusCode != HttpStatusCode.NotFound) CheckResponse(response);
     }
 
