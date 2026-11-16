@@ -4,6 +4,12 @@ param(
     [switch]$ShowLaunchError,
     [switch]$PrepareWorkspaceOnly,
     [switch]$WorkCenter,
+    [switch]$BrowserLogin,
+    [switch]$EnableIsolatedCode,
+    [string[]]$McpCommand,
+    [string]$WebhookRules,
+    [ValidateRange(1024,65535)][int]$WebhookPort = 8644,
+    [string]$AppPath,
     [string]$OpenAiKeyFile,
     [string]$CodexPath,
     [string]$Model,
@@ -30,7 +36,7 @@ try {
     }
     $workPath = Join-Path $documents 'MIA Workspace'
     # Reject redirected paths, including junctions above the workspace.
-    foreach ($relative in @('', 'input', 'jobs', 'temp', 'state', 'state/hermes', 'state/mia', 'state/codex', 'logs', 'checks')) {
+    foreach ($relative in @('', 'input', 'jobs', 'downloads', 'temp', 'state', 'state/hermes', 'state/mia', 'state/codex', 'logs', 'checks')) {
         $folder = if ($relative) { Join-Path $workPath $relative } else { $workPath }
         for ($parent = [IO.DirectoryInfo]::new($folder); $null -ne $parent; $parent = $parent.Parent) {
             if ($parent.Exists -and ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
@@ -89,6 +95,7 @@ try {
     $env:MIA_HERMES_EXECUTABLE = $hermes
     $env:MIA_HERMES_ENTRY = $entry
     $env:MIA_HERMES_MEMORY_ENTRY = Join-Path $PSScriptRoot 'integration/hermes/mia_memory.py'
+    $env:MIA_HERMES_KANBAN_ENTRY = Join-Path $PSScriptRoot 'integration/hermes/mia_kanban.py'
     $env:PYTHONDONTWRITEBYTECODE = '1'
     $env:UV_CACHE_DIR = Join-Path $workPath 'temp/uv-cache'
     $keyStore = Join-Path $state 'openai.key'
@@ -130,11 +137,33 @@ try {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'integration/hermes/SOUL.md') -Destination $soul
     }
     $plugin = Join-Path $homePath 'plugins/mia-codex'
-    foreach ($name in @('plugin.yaml','__init__.py','bridge.py','extensions.py','history.py')) {
+    foreach ($name in @('plugin.yaml','__init__.py','bridge.py','extensions.py','history.py','browser_tools.py','scheduled_tasks.py','webhook_events.py','isolated_code.py')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot "integration/hermes/mia-codex/$name") -Destination $plugin
+    }
+    $calendarSkill = Join-Path $homePath 'skills/mia-calendar'
+    New-Item -ItemType Directory -Force -Path $calendarSkill | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'integration/hermes/skills/mia-calendar/SKILL.md') -Destination $calendarSkill
+
+    Invoke-Hermes mia-configure-calendar
+    if ($McpCommand) {
+        if ($McpCommand[0] -in @('enable','disable')) {
+            if ($McpCommand.Count -ne 2) { throw 'Supply the MCP server name.' }
+            Invoke-Hermes mia-mcp-toggle @McpCommand
+            return
+        }
+        if ($McpCommand[0] -notin @('add','list','test','login','reauth','configure','config','remove','rm','catalog')) {
+            throw 'Use -McpCommand with add, list, test, login, reauth, configure, remove or catalog.'
+        }
+        Invoke-Hermes mcp @McpCommand
+        return
     }
 
     if ($Setup) { Invoke-Hermes setup }
+    if ($BrowserLogin) {
+        $browserProfile = Join-Path $homePath 'mia-browser-profile'
+        Invoke-Hermes config set browser.user_data_dir $browserProfile
+        Invoke-Hermes config set browser.headed true
+    }
     if ($env:OPENAI_API_KEY) {
         if (-not $Model -and -not (Test-Path -LiteralPath $keyStore -PathType Leaf)) { $Model = 'gpt-6.1-terra' }
         Invoke-Hermes config set model.provider openai-api
@@ -143,6 +172,7 @@ try {
     if ($Model) { Invoke-Hermes config set model.default $Model }
     Invoke-Hermes plugins enable mia-codex
     Invoke-Hermes config set memory.provider none
+    Invoke-Hermes config set kanban.dispatch_in_gateway false
 
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     $listener.Start()
@@ -155,9 +185,39 @@ try {
     $env:MIA_HERMES_KEY = $env:API_SERVER_KEY
     $env:MIA_START_LAUNCHER = $PSCommandPath
     $env:MIA_DATA_DIR = $miaData
+    $env:MIA_CRON_DELIVERY_ENABLED = 'true'
+    $env:MIA_CRON_HOME_CHANNEL = 'desktop'
+    $env:MIA_WEBHOOK_RULES = if ($WebhookRules) { (Resolve-Path -LiteralPath $WebhookRules).Path } else { $null }
+    $env:MIA_WEBHOOK_PORT = [string]$WebhookPort
     if ($SelfTestTaskFile) { $env:MIA_DATA_DIR = Join-Path $workPath ('checks/' + [guid]::NewGuid().ToString('N')) }
     # Keep the API tool selection local to this profile and avoid starting other adapters.
-    Invoke-Hermes config set platform_toolsets.api_server '[web, vision, todo, clarify, memory, session_search, mia_codex]'
+    $toolsets = @('web','vision','todo','clarify','memory','session_search','mia_codex')
+    if ($EnableIsolatedCode) {
+        if (-not (Get-Command docker -CommandType Application -ErrorAction SilentlyContinue)) {
+            throw 'Install and start Docker Desktop before using -EnableIsolatedCode.'
+        }
+        $containerOs = & docker info --format '{{.OSType}}'
+        if ($LASTEXITCODE -ne 0) { throw 'Docker is not ready.' }
+        if ($containerOs -ne 'linux') { throw 'Switch Docker Desktop to Linux containers.' }
+        $env:MIA_ISOLATED_CODE = '1'
+        Invoke-Hermes config set terminal.backend docker
+        Invoke-Hermes config set terminal.docker_network false
+        Invoke-Hermes config set terminal.docker_volumes '[]'
+        Invoke-Hermes config set terminal.docker_extra_args '[]'
+        Invoke-Hermes config set terminal.docker_env '{}'
+        Invoke-Hermes config set terminal.docker_mount_cwd_to_workspace false
+        Invoke-Hermes config set terminal.docker_forward_env '[]'
+        Invoke-Hermes config set terminal.container_persistent false
+        Invoke-Hermes config set terminal.docker_persist_across_processes false
+        Invoke-Hermes config set terminal.docker_shared_container_key '""'
+        Invoke-Hermes config set proxy.enabled false
+        Invoke-Hermes config set code_execution.mode strict
+        Invoke-Hermes config set code_execution.timeout 60
+        Invoke-Hermes config set code_execution.max_tool_calls 12
+    } else {
+        $env:MIA_ISOLATED_CODE = $null
+    }
+    Invoke-Hermes config set platform_toolsets.api_server ('[' + ($toolsets -join ', ') + ']')
     $arguments = @('-I','-B',('"{0}"' -f $entry),'gateway','run')
     $service = Start-Process -FilePath $hermes -ArgumentList $arguments -WorkingDirectory $workPath -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput (Join-Path $workPath 'logs/hermes-gateway.log') -RedirectStandardError (Join-Path $workPath 'logs/hermes-gateway-error.log')
@@ -171,11 +231,25 @@ try {
         } catch { Start-Sleep -Milliseconds 400 }
     }
     if (-not $ready) { throw "Hermes did not start. Check $workPath\logs\hermes-gateway-error.log." }
+    if ($WebhookRules) {
+        $webhookReady = $false
+        for ($attempt = 0; $attempt -lt 20 -and -not $service.HasExited; $attempt++) {
+            try {
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:$WebhookPort/health" -TimeoutSec 2
+                if ($health.service -eq 'miawebhook') { $webhookReady = $true; break }
+            } catch { }
+            Start-Sleep -Milliseconds 250
+        }
+        if (-not $webhookReady) {
+            throw "MIA webhook did not start. Check the rules, secrets, port and Hermes gateway log."
+        }
+    }
 
     if ($GatewayOnly) {
         Write-Host "Hermes ready on $env:MIA_HERMES_URL. This process owns the Gateway."
         $service.WaitForExit()
     } else {
+        if ($AppPath) { $exe = (Resolve-Path -LiteralPath $AppPath).Path }
         if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Run build.ps1 first.' }
         $miaArgs = @()
         if ($SelfTestTaskFile) { $miaArgs = @('--hermes-self-test-file', ('"{0}"' -f (Resolve-Path -LiteralPath $SelfTestTaskFile).Path)) }

@@ -7,3 +7,7 @@ provides_tools:
   - mia_list_directory
   - mia_task_search
   - mia_conversation_search
+  - mia_browser
+  - mia_calendar_workflow
+  - mia_schedule_manage
+  - mia_execute_code

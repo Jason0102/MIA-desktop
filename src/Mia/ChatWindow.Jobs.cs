@@ -25,6 +25,7 @@ public sealed partial class ChatWindow
         internal string? Reply { get; set; }
         internal string SessionId { get; set; } = Guid.NewGuid().ToString("N");
         internal string? RunPath { get; set; }
+        internal KanbanCard? Kanban { get; init; }
     }
 
     private readonly List<WorkItem> _jobs = new();
@@ -277,9 +278,10 @@ public sealed partial class ChatWindow
         await StartWork(title, prompt, images, session, request, effort);
     }
 
-    private Task StartWork(string text, string prompt, byte[][] images, string? taskSession = null, string? request = null, string effort = "medium")
+    private Task StartWork(string text, string prompt, byte[][] images, string? taskSession = null, string? request = null,
+        string effort = "medium", KanbanCard? kanban = null)
     {
-        var job = new WorkItem(text, request ?? text) { ReasoningEffort = effort };
+        var job = new WorkItem(text, request ?? text) { ReasoningEffort = effort, Kanban = kanban };
         if (taskSession is not null) job.SessionId = taskSession;
         var heading = new DockPanel();
         var stop = Ui.Button("停止", () => StopJob(job));
@@ -304,6 +306,8 @@ public sealed partial class ChatWindow
         {
             string reply = await _app.Hermes!.ReplyAsync(prompt, images, job.Cancellation.Token,
                 update => UpdateJobAsync(job, update), taskSession: job.SessionId, saveHistory: false, reasoningEffort: job.ReasoningEffort);
+            if (job.Kanban is { } kanban)
+                await SettleKanbanAsync(kanban, "review", reply);
             job.Reply = reply;
             try { _app.Hermes.RecordExchange(job.Request, reply); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -319,7 +323,9 @@ public sealed partial class ChatWindow
             RememberTask(job, "已完成");
             RenderActivity();
             var result = _taskResults.Find(job.SessionId);
-            _app.NotifyTaskResult(ShortTitle(result?.Title ?? job.Title), hasResult: true, taskId: job.SessionId);
+            string notificationTitle = ShortTitle(result?.Title ?? job.Title);
+            if (job.Kanban is not null) notificationTitle = "待審核 · " + notificationTitle;
+            _app.NotifyTaskResult(notificationTitle, hasResult: true, taskId: job.SessionId);
             string visibleReply = TaskCompletion.Display(reply, result?.Files.Length > 0);
             _lastReply = visibleReply;
             _hermesFinalReply = visibleReply;
@@ -328,10 +334,12 @@ public sealed partial class ChatWindow
         }
         catch (OperationCanceledException)
         {
+            if (job.Reply is null) await BlockKanbanAfterFailureAsync(job.Kanban, "已停止執行。");
             if (!_app.IsExiting) AddMessage("米亞 · " + ShortTitle(job.Title), "已結束等待。", true);
         }
         catch (Exception ex)
         {
+            if (job.Reply is null) await BlockKanbanAfterFailureAsync(job.Kanban, Friendly(ex));
             if (!_app.IsExiting)
             {
                 AddMessage("米亞 · " + ShortTitle(job.Title), Friendly(ex), true);

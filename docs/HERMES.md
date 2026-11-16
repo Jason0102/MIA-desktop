@@ -57,3 +57,39 @@ Codex 委派工具接受 reasoning_effort，透過 model_reasoning_effort 傳給
 Hermes 的 clarify／approval 詢問會在對話顯示任務名稱與問題，工作中心顯示「待確認」。可直接回答；有多項詢問時先點「回覆這項詢問」指定對象。授權只接受明確的允許／拒絕文字或按鈕，不將條件式或含糊答覆視為許可。答案送至原 run、request 與 generation；重複事件不重複提問，送出失敗保留待確認狀態，任務結束後停用舊問題。
 
 `MIA.exe --questions-self-test` 在隔離的 MIA_DATA_DIR 輸出 questions-check.json，驗證對話顯示、指定回覆、授權按鈕、重複事件和多項待確認狀態，不送出真實授權。
+
+## 排程、瀏覽器與行事曆
+
+- 在對話中輸入「每天台北時間 16:00 提醒我喝水」或「每週五 17:00 執行指定任務」。也可以查詢、修改、暫停、恢復或刪除排程。純文字提醒不需要在到期時呼叫模型。從系統匣的「排程結果與提醒」可讀取通知與歷史。桌寵及 Gateway 須運行才能在到期時執行，排程可能受約一分鐘的檢查間隔影響。重啟後依 Hermes 的補跑規則處理。
+- 請米亞操作網站時，瀏覽器可開頁、讀取文字與控制項、點選、填寫及下載。下載檔案放在工作區的 `downloads`。首次需要手動登入時，可用 `./Start-Mia.ps1 -BrowserLogin` 開啟可見瀏覽器，登入資料保存在米亞專用的 Chromium 設定檔。若安裝時略過 Chromium，可重跑 `Install-Hermes.ps1` 補裝。
+- 在對話中可以請米亞新增、查詢、預覽、修改或取消個人事件。日曆事件存入 MIA Workspace 的 SQLite，並支援全天和重複事件。衝突檢查先比較時間，再用 Google Maps 的網頁路線查詢估算前後交通。缺少地點或網頁無法查指定時段，米亞會說明該段交通尚未確認。此行事曆流程暫無提前提醒。
+- 如需在一次 Python 執行中組合 Hermes 工具，先安裝並啟動使用 Linux 容器的 Docker Desktop，再用 `./Start-Mia.ps1 -EnableIsolatedCode` 啟動。腳本在獨立容器執行，限制 60 秒與 12 次工具呼叫，容器無主機目錄掛載及直接網路。經 Hermes 提供的工具呼叫仍適用個別工具的權限及網路設定。需要下載容器映像時，由 Docker 主機完成下載。
+
+## MCP 外部工具
+
+內附本機行事曆伺服器會在啟動時註冊。要設定其他 MCP 伺服器，先結束 MIA，再從專案目錄執行下列命令。新增時使用服務提供的 URL 或受信任的 stdio 命令，依服務要求選 OAuth 或標頭授權。重新啟動 MIA 後，啟用的工具可用於米亞任務。
+
+```powershell
+./Start-Mia.ps1 -McpCommand @('list')
+./Start-Mia.ps1 -McpCommand @('add','example','--url','https://example.org/mcp','--auth','oauth')
+./Start-Mia.ps1 -McpCommand @('test','example')
+./Start-Mia.ps1 -McpCommand @('login','example')
+./Start-Mia.ps1 -McpCommand @('configure','example')
+./Start-Mia.ps1 -McpCommand @('disable','example')
+```
+
+使用 `enable` 可重新啟用，使用 `remove` 可移除外部設定。已停用的內附行事曆可用 `enable mia_calendar` 恢復。
+
+## 工作看板與 Webhook
+
+工作中心的「持久工作看板」可建立帶前置依賴的任務。任務結果會先進入審核，通過後才派發依賴它的卡片。可退回修改、查看交接或解除阻塞。重啟後，先前中斷的任務會標為阻塞，避免自動重複執行。
+
+Webhook 僅接收經簽章驗證的事件。先在米亞建立排程並取得排程 ID，再建立規則檔。以下範例在 `report-ready` 收到 `ready` 事件時執行指定排程。
+
+```json
+{"report-ready":{"event":"ready","job":"替換為排程 ID","secret_env":"MIA_WEBHOOK_SECRET_REPORT"}}
+```
+
+在啟動用的環境設定至少 32 個字元的 `MIA_WEBHOOK_SECRET_REPORT`，執行 `./Start-Mia.ps1 -WebhookRules .\rules.json`。本機端點預設為 `http://127.0.0.1:8644/webhooks/report-ready`，可用 `-WebhookPort` 改埠。遠端來源可經使用者配置的 HTTPS 轉送服務接入。
+
+POST 請求的 JSON 本文需包含 `{"event":"ready"}`。以 Unix 秒填入 `X-MIA-Timestamp`，以穩定且唯一的事件 ID 填入 `X-MIA-Delivery`。用規則的密鑰對 `時間戳.事件ID.原始本文` 計算 HMAC-SHA256，將小寫十六進位結果填入 `X-MIA-Signature`。本文的其他欄位不會傳入任務。重新送出同一事件 ID 與本文可查詢執行狀態，並須以有效時間戳重新簽章。排程忙碌時會延遲重試，已開始但被關機中斷的事件會標為狀態不確定。排程結果可從米亞的系統匣查看。

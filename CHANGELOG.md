@@ -1,5 +1,12 @@
 # 版本紀錄
 
+## 3.2 工作流程更新 — 2026-11-16
+
+- 接入 Hermes 排程與系統匣通知，並在工作中心加入持久工作看板。
+- 加入 Chromium 操作、本機 MCP 行事曆及 Google Maps 網頁交通檢查。
+- 加入外部 MCP 設定入口、經簽章驗證的 Webhook 排程觸發與本機事件紀錄。
+- 加入可選的 Docker 隔離 Python 工具編排，實機 Docker 驗收待完成。
+
 ## 3.2 分支更新 — 2026-11-16
 
 - 將 MIA、Hermes 與 Codex 的本機狀態集中到 MIA Workspace，移轉既有資料，並限制 Codex 的來源路徑與工作目錄。

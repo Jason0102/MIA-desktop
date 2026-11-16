@@ -2,7 +2,7 @@
 
 Windows 桌面上的貓精靈夥伴，使用 C#、.NET 8 與 WPF 製作。支援陪伴、探索窗沿、跨螢幕活動、玩球，以及可選的 AI 對話與情緒語音。
 
-**3.2** 由公開版 `3.1` 衍生，加入本機 Hermes 主代理、Codex 工作委派及 Windows 桌面工具。Hermes 模式由專用啟動腳本提供；直接開啟 `MIA.exe` 仍可使用原有對話。安裝及驗證方式見 [3.2 整合說明](docs/HERMES.md)。
+**3.2** 由公開版 `3.1` 衍生，以本機 Hermes 處理任務並委派 Codex。日常使用請雙擊 `啟動米亞.vbs`，由它啟動 Hermes Gateway 和米亞。直接開啟 `MIA.exe` 可使用桌寵及原有對話模式。安裝及驗證方式見 [3.2 整合說明](docs/HERMES.md)。
 
 ## 動畫預覽
 
@@ -32,19 +32,26 @@ Windows 桌面上的貓精靈夥伴，使用 C#、.NET 8 與 WPF 製作。支援
 | 本地記憶 | 成功完成的對話存入 JSONL；重啟載入最近 10 輪；可清除，損壞單行可略過 |
 | 語音／情緒 | 分句佇列、串流 PCM 播放、取消與清理；音訊標籤隱藏於聊天畫面，播放期間套用對應情緒動畫 |
 | 角色 | 編輯 `src/Mia/role.json`（建置後位於執行檔旁）；每次請求附帶日期、時間與時區 |
+| 排程與通知 | 從對話管理 Hermes 排程，從系統匣查看提醒與執行結果。米亞須運行才能到時觸發 |
+| 持久工作看板 | 在工作中心建立有前置依賴的任務，處理阻塞、交接和審核 |
+| 瀏覽器與行事曆 | 用 Chromium 操作網頁，並以本機 SQLite 管理事件。透過 Google Maps 網頁檢查交通，行事曆提前提醒暫緩 |
+| 外部整合 | 可設定 MCP 與簽章 Webhook。Python 工具編排需另以 Docker 模式啟動 |
 
 完整程式對照與限制見 [功能盤點](docs/FEATURES.md)。
 
 ## 建置與啟動
 
-需要 Windows x64 和 .NET 8 SDK（WPF／Windows Desktop）。在專案根目錄執行：
+首次從原始碼安裝需要 Windows x64、.NET 8 SDK（WPF／Windows Desktop）、Codex CLI 和可用的 Hermes 模型帳號。從專案根目錄執行：
 
 ```powershell
+./Install-Hermes.ps1
 ./build.ps1 -Test
-./dist/MIA-3.2-win-x64/MIA.exe
+./Start-Mia.ps1 -Setup
 ```
 
-建置會輸出自帶 .NET runtime 的 Windows x64 版本。Hermes 安裝與首次設定完成後可雙擊 `啟動米亞.vbs`，退出使用 `退出米亞.vbs`。源碼版不內附 SDK。僅執行檢查：
+建置會將自帶 .NET runtime 的 Windows x64 程式放到 `dist/MIA-3.2-win-x64`。首次設定完成後，日常雙擊 `啟動米亞.vbs`，結束使用 `退出米亞.vbs`。更新時先退出舊版，再重新執行 `build.ps1` 並雙擊啟動。需要自訂路徑、啟用 Docker 或 Webhook 時，請按[整合說明](docs/HERMES.md)使用 PowerShell 啟動。
+
+只執行檢查時使用以下命令：
 
 ```powershell
 dotnet run --project tests/Mia.Checks.csproj -c Release
@@ -52,6 +59,18 @@ python scripts/check_public.py
 ```
 
 一般檢查使用模擬 HTTP 服務，不呼叫付費 API。`--live`、`--setup-voice` 與 `--preview-audio` 是另行選用的開發工具，可能連線或產生費用。
+
+## 開發紀錄
+
+### 3.2 工作流程更新 · 2026-11-16
+
+- 接入 Hermes 排程與本機通知歷史，工作中心新增可重啟續用的看板，支援依賴、阻塞、交接與審核。
+- 加入 Chromium 網頁操作、MCP 連線管理和 Webhook 排程觸發。Webhook 驗證簽章並記錄執行結果，避免重送時重複派工。
+- 內附 SQLite 行事曆與 `mia-calendar` 技能，可記錄事件、檢查時間重疊，並透過 Google Maps 網頁查相鄰行程的交通時間。
+- 加入可選的 Docker 隔離 Python 工具編排。已驗證工具呼叫、失敗及取消，實機 Docker 驗收仍待完成。
+- .NET 703 項檢查通過。整合檢查涵蓋 Hermes Gateway、排程交付、看板持久化、MCP 與 Webhook，也用 Chromium 驗證了表單、下載及 Google Maps 路線估時。
+
+較早的 3.2 更新加入任務續接、歷史搜尋、持久記憶、任務確認和分級推理。各版變更及後續項目見[版本紀錄](CHANGELOG.md)與[功能待實作清單](功能待實作清單.txt)。
 
 ## 金鑰與聲線
 

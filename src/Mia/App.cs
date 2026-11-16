@@ -10,7 +10,7 @@ using Forms = System.Windows.Forms;
 
 namespace Mia;
 
-public sealed class App : Application
+public sealed partial class App : Application
 {
     private Mutex? _mutex;
     private EventWaitHandle? _wake;
@@ -96,11 +96,18 @@ public sealed class App : Application
         _tray.DoubleClick += (_,_)=>Dispatcher.Invoke(Recall);
         _tray.BalloonTipClicked += (_,_)=>Dispatcher.Invoke(() =>
         {
+            if (_scheduledBalloon) { _scheduledBalloon = false; ShowScheduledNotices(); return; }
             if (_notificationTask is not { } task) { ShowChat(); return; }
             ShowWorkCenter();
             _chat?.SelectResults(true, task);
         });
         _tray.ShowBalloonTip(3000,"米亞已啟動",hotkey?"Ctrl + Shift + M 喚回米亞；右鍵系統匣可完整退出。":"可由系統匣喚回或退出米亞。快捷鍵已被其他程式使用。",Forms.ToolTipIcon.Info);
+        if (!e.Args.Any(arg => arg.Contains("--", StringComparison.Ordinal) && arg.Contains("self-test", StringComparison.Ordinal)))
+        {
+            InitializeScheduledNotices(menu);
+            if (Hermes is not null && Environment.GetEnvironmentVariable("MIA_HERMES_KANBAN_ENTRY") is { Length: > 0 })
+                _chat ??= new ChatWindow(this);
+        }
         if(e.Args.Contains("--settings")) ShowSettings();
         else if(e.Args.Contains("--work-center")) ShowWorkCenter();
         else if(e.Args.Contains("--chat")) ShowChat();
@@ -241,6 +248,7 @@ public sealed class App : Application
     internal void NotifyTaskResult(string taskTitle, bool hasResult, string? taskId = null)
     {
         if (_exiting || _tray is null) return;
+        _scheduledBalloon = false;
         _notificationTask = taskId;
         _tray.ShowBalloonTip(5000, hasResult ? "米亞 · 任務結果已回傳" : "米亞 · 任務未完成",
             $"「{taskTitle}」\n點此查看結果。", Forms.ToolTipIcon.Info);
@@ -306,6 +314,7 @@ public sealed class App : Application
     }
     protected override void OnExit(ExitEventArgs e)
     {
+        StopScheduledNotices();
         _wakeWait?.Unregister(null); _wake?.Dispose();
         _exitWait?.Unregister(null); _exitSignal?.Dispose();
         if(_handle!=IntPtr.Zero)UnregisterHotKey(_handle,1);
