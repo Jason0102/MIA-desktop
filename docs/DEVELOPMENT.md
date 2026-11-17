@@ -1,11 +1,11 @@
-# 開發與發佈
+# 共通素材與預覽維護
 
-`src/Mia` 為 WPF 應用程式；`tests` 是不依賴測試框架的檢查執行檔；`art` 保留公開預覽所需的最終資產。歷史 raw 圖、生成中間檔、個人設定、驗證截圖與舊 ZIP 未收錄。
+main 維護專案首頁、共通素材與離線預覽。應用程式開發、建置、執行及版本測試請前往 [3.1](https://github.com/Jason0102/MIA-desktop/tree/3.1)、[3.2](https://github.com/Jason0102/MIA-desktop/tree/3.2) 或 [3.3](https://github.com/Jason0102/MIA-desktop/tree/3.3) 分支。
 
-`build.ps1 -Test` 執行模擬服務檢查後，publish 自帶 runtime 的 win-x64 程式到 `dist/MIA-3.2-win-x64`。可用 `-DotnetPath` 指定 SDK，或使用專案內 `.tools/dotnet/dotnet.exe` 或 PATH 中的 dotnet。
+角色圖集位於 `art/character/`，示範語音位於 `art/speech-audio/`。移動素材時，需同步更新 `art/v39-timed/catalog.json`、`catalog.js` 及根目錄情緒預覽頁的相對路徑。JSON 與 JavaScript 動畫目錄應保持一致。
 
-發佈前執行 `python scripts/check_public.py`，檢查金鑰範例、敏感檔名、預覽依賴及素材數量。此檢查不取代完整秘密掃描。外部維護者不需要任何真實金鑰即可建置與跑一般檢查。
+在儲存庫根目錄執行 `python scripts/check_public.py`，檢查動畫數量、預覽依賴、示範音訊及公開檔案邊界。此檢查不需要 API 金鑰，也不取代完整秘密掃描。
 
-3.2 延續公開 Git 歷史，在獨立目錄開發並推送至 `3.2` 分支。使用 Git 發佈源碼時，請保留 `.mia-runtime`、`dist`、金鑰與測試資料的忽略規則。
+用瀏覽器開啟根目錄 `動畫預覽.html` 可查看兩類預覽。維護時應確認分頁切換、動畫播放與語音試聽。保留現有素材製作編號，以利追溯來源。
 
-若需公開二進位包，從本公開版重建，不使用原工作目錄的舊封裝；封裝前檢查內容及私密資料。角色範例與 api_key.example 可以附帶，真實 api_key 不可附帶。
+main 的素材搬移不會同步修改各版本分支；需要更新某版本素材時，請在該分支依其程式使用的路徑整合。

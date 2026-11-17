@@ -1,9 +1,0 @@
-name: mia-codex
-version: "3.2.0"
-description: Delegate a document or workspace task to a locally installed Codex CLI and return its result to MIA.
-provides_tools:
-  - mia_codex_run
-  - mia_install_extension
-  - mia_list_directory
-  - mia_task_search
-  - mia_conversation_search
