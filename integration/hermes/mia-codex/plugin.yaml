@@ -5,6 +5,7 @@ provides_tools:
   - mia_work_cards
   - mia_templates
   - mia_voice_generate
+  - mia_learning
   - mia_computer_use
   - mia_powerpoint_check
   - mia_codex_run

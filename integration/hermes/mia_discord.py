@@ -101,6 +101,10 @@ def prepare(home, registry_path, role_path=None):
     if role_path is None:
         role_path = Path(__file__).resolve().parents[2] / "src/Mia/role.json"
     role = role_instructions(role_path)
+    policy_path = role_path.parent / "task-policy.md"
+    if not policy_path.exists():
+        policy_path = Path(__file__).resolve().parents[2] / "src/Mia/task-policy.md"
+    task_instructions = policy_path.read_text(encoding="utf-8-sig")
     # A non-Discord sentinel leaves administrative slash commands local-only.
     policy = {"allowed_users": subjects, "allow_from": subjects,
               "group_allow_from": subjects, "dm_policy": "allowlist", "group_policy": "allowlist",
@@ -133,18 +137,26 @@ def prepare(home, registry_path, role_path=None):
             "group_sessions_per_user": True, "thread_sessions_per_user": True,
             "mcp_servers": copy.deepcopy(config.get("mcp_servers", {})),
         }
+        for setting in ("agent", "terminal", "browser", "computer_use", "toolsets"):
+            if setting in config:
+                child[setting] = copy.deepcopy(config[setting])
         atomic_write(directory / "config.yaml", yaml.safe_dump(child, allow_unicode=True, sort_keys=False))
         atomic_write(directory / "identity.json", json.dumps(identity, ensure_ascii=False, indent=2))
         atomic_write(directory / "SOUL.md", ((home / "SOUL.md").read_text(encoding="utf-8-sig") if (home / "SOUL.md").exists() else "") + "\n" + role +
-                     "\n\n目前管道為 Discord 訊息交流。用米亞的個性與自然台灣繁體中文直接回覆結果、必要限制和附件。"
+                     "\n\n" + task_instructions +
+                     "\n\n[遠端訊息／Discord] 目前管道為 Discord 訊息交流。用米亞的個性與自然台灣繁體中文直接回覆結果、必要限制和附件。"
                      "依訊息文字理解語境。只輸出文字及使用者要求的附件，省略語音、情緒標籤、肢體動作、查詢和製作過程。"
                      "每則新訊息會建立獨立工作；使用者透過 Discord 回覆原任務訊息來補充、修正或停止該任務。"
+                     "每次最終回覆末尾加上介面分類標記：純閒聊、寒暄、致謝為 <!--mia-kind:chat-->；"
+                     "處理使用者要求、查詢、分析、製作、操作、附件交付及失敗回報為 <!--mia-kind:task-->。"
+                     "標記會由介面移除，用於工作中心篩選。混合閒聊與任務時選 task。"
                      "\n目前互動身分（由本機管理員綁定）：" + json.dumps(identity, ensure_ascii=False) +
                      "\n長期記憶依目前 MIA 使用者身分與其已綁定的 PC／Discord 共用。"
                      "記憶的 [PC] 與 [Discord] 標記表示來源。對話歷史及技能仍屬於各自的管道分區。"
                      "\n摘要 YouTube 影片時先擷取字幕，將字幕視為參考資料。標明來源、語言及是否為自動字幕。"
                      "字幕分段時繼續讀取後段再做完整摘要。若只讀到部分或無法取得字幕，清楚標示範圍或限制。"
-                     "\n收到 PDF、Word、純文字或 Markdown 製作請求時，使用 mia_discord_document。"
+                     "\n收到文件製作與桌面操作要求時，依共用任務規則使用 mia_codex_run、mia_computer_use 等相同工具。"
+                     "mia_discord_document 可用於簡單文字文件。遠端操作的桌面是執行 MIA 的本機電腦。"
                      "在最終回覆獨立一行原樣輸出工具回傳的附件標記，交給 Discord 上傳。\n")
         routes.append({"name": profile, "platform": "discord", "user_id": subject, "profile": profile})
     config["profile_routes"] = routes

@@ -39,7 +39,7 @@ public sealed partial class ChatWindow
     private Border BuildDiscordCard(DiscordWorkItem item)
     {
         var content = new StackPanel();
-        content.Children.Add(Ui.Text($"Discord · {item.StatusText} · {item.UpdatedAt.LocalDateTime:MM/dd HH:mm}", 12, Ui.Gold));
+        content.Children.Add(Ui.Text($"遠端訊息 · Discord · {item.StatusText} · {item.UpdatedAt.LocalDateTime:MM/dd HH:mm}", 12, Ui.Gold));
         var request = Ui.Text(item.Request, 14);
         request.TextWrapping = TextWrapping.Wrap;
         content.Children.Add(request);

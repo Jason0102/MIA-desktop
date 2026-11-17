@@ -13,6 +13,7 @@ from .isolated_code import block_native_code, registration as code_registration
 from .work_cards import registration as cards_registration
 from .templates import registration as templates_registration
 from .voice_export import registration as voice_registration
+from mia_learning import registration as learning_registration
 from .desktop_tools import computer_registration, powerpoint_registration, note_registration
 from .permissions import install_policy, guard_delegated_operation
 
@@ -33,6 +34,7 @@ def register(ctx):
     ctx.register_tool(**cards_registration())
     ctx.register_tool(**templates_registration())
     ctx.register_tool(**voice_registration())
+    ctx.register_tool(**learning_registration())
     ctx.register_tool(**computer_registration())
     ctx.register_tool(**note_registration())
     ctx.register_tool(**powerpoint_registration())

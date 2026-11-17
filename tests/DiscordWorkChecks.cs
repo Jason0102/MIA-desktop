@@ -14,6 +14,12 @@ internal static class DiscordWorkChecks
             [new("desktop", "local", "jason"), new("discord", "123", "jason"), new("discord", "456", "other")])));
         var item = new DiscordWorkItem("a", "jason", "123", "channel", "task", "make PDF", "done", ["result.pdf"], "running", DateTimeOffset.UtcNow);
         string snapshot = Path.Combine(state, "discord-work", "a.json");
+        check(DiscordWork.IsConversation(item with { Request = "收到，檔案正確，多謝囉", Files = [] }), "DC acknowledgement is hidden");
+        check(DiscordWork.IsConversation(item with { Request = "另外你喜歡吃什麼當晚餐？", Files = [] }), "DC small talk is hidden");
+        check(!DiscordWork.IsConversation(item with { Request = "你好，請幫我製作 PDF", Files = [] }), "DC mixed greeting and task is retained");
+        check(!DiscordWork.IsConversation(item with { Request = "謝謝，這份附件", Files = ["a.pdf"] }), "DC artifacts remain visible");
+        check(DiscordWork.IsConversation(item with { Request = "天氣讓人好想睡", Files = [], Kind = "chat" }), "DC semantic chat classification is hidden");
+        check(!DiscordWork.IsConversation(item with { Request = "早安", Files = [], Kind = "task" }), "DC task classification takes precedence over legacy phrases");
         File.WriteAllText(snapshot, JsonSerializer.Serialize(item));
         File.WriteAllText(Path.Combine(state, "discord-work", "b.json"), JsonSerializer.Serialize(item with { Id = "b", UserId = "other", DiscordUserId = "456" }));
         File.WriteAllText(Path.Combine(state, "discord-work", "c.json"), "{partial");

@@ -2,6 +2,7 @@
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -55,6 +56,11 @@ def install(home):
         return await original_hook(adapter, name, *args, **kwargs)
 
     async def extract(adapter, response, event, *args, **kwargs):
+        if event.source.platform.value == 'discord' and isinstance(response, str):
+            kinds = re.findall(r'<!--mia-kind:(chat|task)-->', response)
+            if kinds:
+                mirror.update(event, Kind=kinds[-1])
+            response = re.sub(r'<!--mia-kind:(?:chat|task)-->', '', response).rstrip()
         result = await original_extract(adapter, response, event, *args, **kwargs)
         files = [str(p) for p, _ in result.media_files] + [str(p) for p in result.local_files]
         mirror.update(event, Reply=result.text_content or '', Files=list(dict.fromkeys(files)))

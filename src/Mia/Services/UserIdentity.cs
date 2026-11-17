@@ -15,7 +15,7 @@ public static class UserIdentity
     public static string Context(string provider, string subject)
     {
         const string desktopContext = "目前管道為 PC 本機，使用者正與桌面人物直接互動。用米亞的角色口吻直接對使用者說話。長期記憶與同一使用者綁定的 Discord 共用，並保留 [PC] 或 [Discord] 來源。對話歷史沿用本機分區。\n";
-        return (provider == "desktop" ? desktopContext : "") + BindingContext(provider, subject);
+        return (provider == "desktop" ? "[直接對話／PC]\n" + desktopContext : "[遠端訊息／" + provider + "]\n") + BindingContext(provider, subject);
     }
 
     private static string BindingContext(string provider, string subject)

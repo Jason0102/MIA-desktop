@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import threading
 import uuid
 
@@ -22,12 +23,46 @@ def computer_registration():
     cua_backend_parse._KEY_ALIASES.update(windows="win", super="win", meta="win")
     schema = copy.deepcopy(COMPUTER_USE_SCHEMA)
     schema["name"] = "mia_computer_use"
+    schema["parameters"]["properties"]["action"]["enum"].extend(["draw_path", "launch_app"])
+    schema["parameters"]["properties"]["app"]["description"] += " For launch_app use an installed .exe path or mspaint.exe (小畫家). After launch, list windows and capture the target before input."
+    schema["parameters"]["properties"]["points"] = {
+        "type": "array", "minItems": 2, "maxItems": 128,
+        "items": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+        "description": "Observed canvas coordinates forming a pencil stroke. Select the pencil first. Each adjacent pair is dragged, keeping the drawing in the actual application."
+    }
     add_operation_fields(schema)
 
     def handle(args, **kwargs):
         error = check_operation("mia_computer_use", args)
         if error:
             return json.dumps({"error": error}, ensure_ascii=False)
+        if args.get("action") == "launch_app":
+            app = args.get("app", "")
+            if app in ("小畫家", "Paint", "paint"):
+                app = "mspaint.exe"
+            executable = shutil.which(app) if isinstance(app, str) else None
+            if not executable or Path(executable).suffix.lower() != ".exe":
+                return json.dumps({"error": "請指定已安裝的應用程式 exe 路徑。"}, ensure_ascii=False)
+            try:
+                process = subprocess.Popen([executable])
+                return json.dumps({"status": "launch_requested", "pid": process.pid,
+                                   "next": "List windows and capture the application before input."})
+            except OSError as error:
+                return json.dumps({"error": str(error)})
+        if args.get("action") == "draw_path":
+            points = args.get("points")
+            if not isinstance(points, list) or not 2 <= len(points) <= 128 or any(
+                not isinstance(p, list) or len(p) != 2 or any(type(v) is not int or v < 0 for v in p)
+                for p in points):
+                return json.dumps({"error": "Supply 2–128 canvas coordinate pairs."})
+            base = {k: v for k, v in args.items() if k not in {"points", "from_element", "to_element"}}
+            for start, end in zip(points, points[1:]):
+                result = handle_computer_use(normalize_computer_args({
+                    **base, "action": "drag", "from_coordinate": start, "to_coordinate": end,
+                    "capture_after": False}), **kwargs)
+                if isinstance(result, str) and json.loads(result).get("error"):
+                    return result
+            return handle_computer_use({"action": "capture", "mode": "vision", "app": args.get("app")}, **kwargs)
         return handle_computer_use(normalize_computer_args(args), **kwargs)
 
     return {"name": schema["name"], "toolset": "mia_codex", "schema": schema, "handler": handle}
