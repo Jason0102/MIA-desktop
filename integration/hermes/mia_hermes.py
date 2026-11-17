@@ -17,6 +17,8 @@ if sys.argv[1:3] == ["gateway", "run"]:
     if shared_memory:
         refresh_prompts(shared_memory)
     restrict_attachment_paths()
+    from mia_discord_tasks import install as install_discord_tasks
+    install_discord_tasks()
 
 from hermes_cli.main import main
 

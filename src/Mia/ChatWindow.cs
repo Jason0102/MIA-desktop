@@ -52,6 +52,7 @@ public sealed partial class ChatWindow : Window
         var root=new StackPanel(); Content=root;
         var details=new StackPanel { Margin=new Thickness(14) };
         InitializeResults();
+        InitializeDiscordWork();
         details.Children.Add(_workPanel);
         _workPanel.Visibility = Visibility.Collapsed;
         _scroll.Content=_messages; _scroll.MaxHeight=170;
@@ -185,8 +186,9 @@ public sealed partial class ChatWindow : Window
         if (!IsWorkCenter) return;
         _activity.Children.Clear();
         var running = _jobs.Where(job => job.Reply is null).ToArray();
-        if (running.Length == 0 && !_boardCards.Any(c => c.Status != "done")) _activity.Children.Add(Ui.Text("目前沒有進行中的任務", 13, Ui.Subtle));
+        if (running.Length == 0 && !_discordWork.Any(item => item.Active) && !_boardCards.Any(c => c.Status != "done")) _activity.Children.Add(Ui.Text("目前沒有進行中的任務", 13, Ui.Subtle));
         foreach (var job in running) _activity.Children.Add(job.Card);
+        foreach (var item in _discordWork.Where(item => item.Active)) _activity.Children.Add(BuildDiscordCard(item));
         RenderBoardStatus();
         if (_kanbanStatus.Text.Length > 0) _activity.Children.Add(Ui.Text(_kanbanStatus.Text, 12, Ui.Subtle));
     }

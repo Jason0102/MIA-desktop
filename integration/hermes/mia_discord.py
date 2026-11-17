@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import shutil
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".mia-runtime/hermes/hermes-agent"))
@@ -107,7 +108,8 @@ def prepare(home, registry_path, role_path=None):
               "group_allow_admin_from": ["mia-local-administrator"],
               "user_allowed_commands": ["new", "reset", "stop", "status"],
               "group_user_allowed_commands": ["new", "reset", "stop", "status"],
-              "allow_bots": "none", "max_attachment_bytes": 32 * 1024 * 1024}
+              "allow_bots": "none", "max_attachment_bytes": 32 * 1024 * 1024,
+              "reply_to_mode": "all", "text_batch_delay_seconds": 0, "text_batch_split_delay_seconds": 0}
     for binding in bindings:
         subject = binding["Subject"]
         profile = "mia-discord-" + subject
@@ -116,24 +118,27 @@ def prepare(home, registry_path, role_path=None):
             for item in ("plugin.yaml", "__init__.py"):
                 atomic_write(plugin_home / "plugins" / TOOL_PLUGIN.name / item,
                              (TOOL_PLUGIN / item).read_text(encoding="utf-8"))
+        if (home / "plugins" / "mia-codex").exists():
+            shutil.copytree(home / "plugins" / "mia-codex", directory / "plugins" / "mia-codex", dirs_exist_ok=True)
         identity = {"provider": "discord", "subject": subject, "user": people[binding["UserId"]]}
         child = {
             "model": copy.deepcopy(config.get("model", {})),
-            "plugins": {"disabled": ["mia-codex"], "enabled": [TOOL_PLUGIN.name]},
-            "platform_toolsets": {"discord": ["web", "vision", "memory", "session_search", "skills", "todo", "mia_discord_tools"]},
+            "plugins": {"enabled": list(dict.fromkeys(config.get("plugins", {}).get("enabled", []) + ["mia-codex", TOOL_PLUGIN.name]))},
+            "platform_toolsets": {"discord": list(dict.fromkeys(config.get("platform_toolsets", {}).get("api_server", []) + ["mia_discord_tools"]))},
             "display": {"platforms": {"discord": DISCORD_DISPLAY}},
             "voice": {"auto_tts": False},
             "memory": {"provider": "none", "memory_enabled": True, "user_profile_enabled": True},
             "platforms": {"discord": {"enabled": False, "extra": {**policy, "allowed_users": [subject],
                 "allow_from": [subject], "group_allow_from": [subject]}}},
             "group_sessions_per_user": True, "thread_sessions_per_user": True,
-            "mcp_servers": {},
+            "mcp_servers": copy.deepcopy(config.get("mcp_servers", {})),
         }
         atomic_write(directory / "config.yaml", yaml.safe_dump(child, allow_unicode=True, sort_keys=False))
         atomic_write(directory / "identity.json", json.dumps(identity, ensure_ascii=False, indent=2))
-        atomic_write(directory / "SOUL.md", role +
+        atomic_write(directory / "SOUL.md", ((home / "SOUL.md").read_text(encoding="utf-8-sig") if (home / "SOUL.md").exists() else "") + "\n" + role +
                      "\n\n目前管道為 Discord 訊息交流。用米亞的個性與自然台灣繁體中文直接回覆結果、必要限制和附件。"
                      "依訊息文字理解語境。只輸出文字及使用者要求的附件，省略語音、情緒標籤、肢體動作、查詢和製作過程。"
+                     "每則新訊息會建立獨立工作；使用者透過 Discord 回覆原任務訊息來補充、修正或停止該任務。"
                      "\n目前互動身分（由本機管理員綁定）：" + json.dumps(identity, ensure_ascii=False) +
                      "\n長期記憶依目前 MIA 使用者身分與其已綁定的 PC／Discord 共用。"
                      "記憶的 [PC] 與 [Discord] 標記表示來源。對話歷史及技能仍屬於各自的管道分區。"
@@ -192,9 +197,6 @@ def restrict_attachment_paths():
         root = get_process_hermes_home()
         file = Path(resolved)
         if file.is_relative_to(root.parent / "mia" / "memory"):
-            return None
-        profile = re.match(r"^agent:(mia-discord-[0-9]{17,20}):discord:", session_key)
-        if profile and not file.is_relative_to(root / "profiles" / profile[1] / "cache"):
             return None
         return resolved
 

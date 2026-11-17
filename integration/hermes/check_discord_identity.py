@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory(dir=HERE.parents[1] / ".mia-runtime") as scratc
     assert 'OPENAI_API_KEY' not in secret_scope.build_profile_secret_scope(homes[1])
     for home in homes[1:]:
         config = yaml.safe_load((home / "config.yaml").read_text())
-        assert "mia-codex" in config["plugins"]["disabled"]
+        assert "mia-codex" in config["plugins"]["enabled"]
         assert config["thread_sessions_per_user"]
         assert config["mcp_servers"] == {}
         assert json.loads((home / "identity.json").read_text(encoding="utf-8"))["provider"] == "discord"

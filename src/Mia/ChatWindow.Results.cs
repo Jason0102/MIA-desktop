@@ -126,7 +126,10 @@ public sealed partial class ChatWindow
         _resultCards.Clear();
         _resultList.Children.Clear();
         var matches = _taskResults.Search(_resultSearch.Text).Take(_resultLimit + 1).ToArray();
-        if (matches.Length == 0)
+        var discord = _discordWork.Where(item => !item.Active &&
+            (item.Request + " " + item.Reply + " " + string.Join(" ", item.Files)).Contains(_resultSearch.Text, StringComparison.OrdinalIgnoreCase)).ToArray();
+        foreach (var item in discord.Take(_resultLimit)) _resultList.Children.Add(BuildDiscordCard(item));
+        if (matches.Length == 0 && discord.Length == 0)
             _resultList.Children.Add(Ui.Text(_resultSearch.Text.Length == 0 ? "目前沒有任務成果" : "找不到符合的成果", 13, Ui.Subtle));
         foreach (var result in matches.Take(_resultLimit))
         {
@@ -134,7 +137,7 @@ public sealed partial class ChatWindow
             _resultList.Children.Add(card);
             _resultCards[result.Id] = card;
         }
-        if (matches.Length > _resultLimit)
+        if (matches.Length > _resultLimit || discord.Length > _resultLimit)
             _resultList.Children.Add(Ui.Button("載入更多", () => { _resultLimit += 30; RenderResults(); }));
     }
 

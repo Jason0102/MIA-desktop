@@ -24,6 +24,7 @@ internal static class Program
         {
             Check(UserIdentity.Context("desktop", "local").Contains("local-jason"), "desktop resolves Jason identity");
             Check(!UserIdentity.Context("discord", "local").Contains("local-jason"), "unbound Discord does not inherit desktop identity");
+            DiscordWorkChecks.Run(scratch, Check);
             foreach (string name in new[] { "附件.docx", "資料.csv", "未知.custom", "無副檔名", "program.exe" })
             {
                 string path = Path.Combine(scratch, name);
