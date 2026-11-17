@@ -85,7 +85,11 @@ Discord 連線準備工具已接入啟動器，實際啟用須有 Bot Token 與�
 
 預設綁定到 `local-jason`（佳勳／Jason）。新增其他使用者時指定 `-DiscordMiaUserId` 及 `-DiscordDisplayName`。電子郵件和使用者名稱不作為身分驗證。設定保存到 `state/mia/users.json`，Bot Token 使用 Windows DPAPI 保存到 `state/discord.key`，綁定目前 Windows 使用者。以原本的 VBS 啟動時會讀取該設定。
 
-每個 Discord 帳號使用 `state/hermes/profiles/mia-discord-<UserID>`，獨立保存會話、記憶及技能，`identity.json` 記錄其 MIA 使用者與 Discord 來源。本機既有資料留在原本的 `state/hermes`。同一人的兩個來源也分開保存。僅登錄的帳號可使用 Bot，管理指令保留在本機執行。
+PC 和 Discord 共用同一個 Hermes Gateway 與代理人執行架構。PC 直接與人物互動。Discord 使用同一份 `role.json`，以文字訊息回傳最終結果與附件。Discord 關閉工具進度、中間訊息與自動語音。
+
+每個 Discord 帳號使用 `state/hermes/profiles/mia-discord-<UserID>` 保存對話與技能，`identity.json` 記錄 MIA 使用者與管道。PC 對話與技能保存在 `state/hermes`。長期記憶依綁定的 MIA 使用者保存，讓同一人跨 PC 與 Discord 共用，並以 `[PC]`、`[Discord]` 保留來源。啟動時將既有 Hermes 記憶匯入一次。從 PC 清除記憶會清除這位使用者的共用長期記憶與 PC 對話。僅登錄的帳號可使用 Bot。
+
+可以私訊米亞「用這個 YouTube 連結的字幕整理摘要，做成 PDF 和 Word 傳給我」。公開字幕可用時會直接讀取，摘要會標示來源及字幕類型。遇到無字幕或影片限制存取時，可以上傳字幕檔供整理。文件支援 PDF、DOCX、TXT 和 Markdown，並以 Discord 附件交付。現有安裝若缺套件，先執行 `Install-Hermes.ps1` 再以原捷徑啟動。
 
 Discord 使用 Hermes 原生圖片、音訊、影片及文件附件傳輸，單個接收檔案上限 32 MiB，傳送仍受 Discord 的伺服器限制。附件傳輸與內容理解依模型及格式能力而定。遠端 profile 不載入本機桌面操作及 C 槽 Codex 插件。
 

@@ -12,6 +12,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(SOURCE))
 import hermes_yaml as yaml
 from mia_discord import bind, prepare, install_model_credentials
+from mia_shared_memory import install, reset_current
 from gateway.profile_routing import parse_profile_routes, match_profile_route
 
 
@@ -80,4 +81,34 @@ with tempfile.TemporaryDirectory(dir=HERE.parents[1] / ".mia-runtime") as scratc
         assert config["thread_sessions_per_user"]
         assert config["mcp_servers"] == {}
         assert json.loads((home / "identity.json").read_text(encoding="utf-8"))["provider"] == "discord"
-print("PASS: identity binding, sender routing, separate desktop/Discord/user memory, restart persistence.")
+    bind(registry, jason, "local-jason")
+    from hermes_constants import set_hermes_home_override, reset_hermes_home_override
+    from tools.memory_tool import load_on_disk_store
+
+    install(root, registry, migrate=True)
+    for home, label in zip(homes, ("PC", "Discord", "Discord")):
+        token = set_hermes_home_override(home)
+        try:
+            store = load_on_disk_store()
+            expected = ["[PC] source-marker-0", "[Discord] source-marker-1"] if home != homes[2] else ["[Discord] source-marker-2"]
+            assert all(entry in store.user_entries for entry in expected)
+            assert len(store.user_entries) == len(expected)
+            if home == homes[1]:
+                assert store.add("user", "new preference")["success"]
+                assert "[Discord] new preference" in load_on_disk_store().user_entries
+        finally:
+            reset_hermes_home_override(token)
+
+    token = set_hermes_home_override(root)
+    try:
+        assert "[Discord] new preference" in load_on_disk_store().user_entries
+        reset_current()
+        assert not load_on_disk_store().user_entries
+    finally:
+        reset_hermes_home_override(token)
+    token = set_hermes_home_override(homes[2])
+    try:
+        assert load_on_disk_store().user_entries == ["[Discord] source-marker-2"]
+    finally:
+        reset_hermes_home_override(token)
+print("PASS: identity routing, legacy migration, cross-channel memory sharing, source labels and user isolation.")

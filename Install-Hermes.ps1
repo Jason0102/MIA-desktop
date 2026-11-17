@@ -48,7 +48,8 @@ $discordPython = Get-ChildItem -LiteralPath (Join-Path $homePath 'installs') -Di
 $discordUv = Get-ChildItem -LiteralPath (Join-Path $homePath 'tools') -Filter uv.exe -Recurse |
     Select-Object -First 1 -ExpandProperty FullName
 if (-not $discordPython -or -not $discordUv) { throw 'Cannot locate the installed Hermes Python/uv runtime.' }
-& $discordUv pip install --python $discordPython 'discord.py==2.7.1' 'audioop-lts==0.2.2'
+& $discordUv pip install --python $discordPython 'discord.py==2.7.1' 'audioop-lts==0.2.2' `
+    'youtube-transcript-api==1.2.4' 'reportlab==5.1.0' 'python-docx==1.2.0'
 if ($LASTEXITCODE -ne 0) { throw 'Discord adapter dependency installation failed.' }
 
 # Reuse an installed native Codex CLI and its matching Windows helper binaries.

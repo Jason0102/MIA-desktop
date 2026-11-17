@@ -258,6 +258,9 @@ try {
     }
     Invoke-Hermes config set platform_toolsets.api_server ('[' + ($toolsets -join ', ') + ']')
     $identityPath = Join-Path $miaData 'users.json'
+    $env:MIA_HERMES_PROFILE_ROOT = $homePath
+    $env:MIA_HERMES_USER_REGISTRY = if (Test-Path -LiteralPath $identityPath) { $identityPath }
+        else { Join-Path $PSScriptRoot 'src/Mia/users.json' }
     $discordKeyPath = Join-Path $state 'discord.key'
     $discordEntry = Join-Path $PSScriptRoot 'integration/hermes/mia_discord.py'
     if ($DiscordUserId) {
@@ -268,6 +271,7 @@ try {
         if ($DiscordDisplayName) { $bindingArgs += @('--name',$DiscordDisplayName) }
         & $hermes @bindingArgs
         if ($LASTEXITCODE -ne 0) { throw 'Discord identity binding failed.' }
+        $env:MIA_HERMES_USER_REGISTRY = $identityPath
     }
     if ($DiscordTokenFile) {
         $discordToken = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $DiscordTokenFile).Path).Trim()
@@ -285,9 +289,11 @@ try {
         $discordSecret = (Get-Content -LiteralPath $discordKeyPath -Raw).Trim() | ConvertTo-SecureString
         $env:DISCORD_BOT_TOKEN = [Net.NetworkCredential]::new('', $discordSecret).Password
         Remove-Variable discordSecret
-        & $hermes -I -B -c 'import discord'
-        if ($LASTEXITCODE -ne 0) { throw 'Discord dependency missing. Install discord.py==2.7.1 into the MIA Hermes Python environment.' }
-        & $hermes -I -B $discordEntry --registry $identityPath
+        & $hermes -I -B -c 'import discord, youtube_transcript_api, reportlab, docx'
+        if ($LASTEXITCODE -ne 0) { throw 'Discord dependencies missing. Run Install-Hermes.ps1 to install them.' }
+        $roleExe = if ($AppPath) { $AppPath } else { $exe }
+        $rolePath = Join-Path (Split-Path -Parent ([IO.Path]::GetFullPath($roleExe))) 'role.json'
+        & $hermes -I -B $discordEntry --registry $identityPath --role $rolePath
         if ($LASTEXITCODE -ne 0) { throw 'Discord profile preparation failed.' }
     }
     if ($DiscordUserId -or $DiscordTokenFile) { Write-Output 'Discord settings saved. Start MIA normally to connect.'; return }

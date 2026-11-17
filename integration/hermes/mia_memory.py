@@ -23,10 +23,13 @@ def remember(payload):
 
 if __name__ == "__main__":
     sys.path.insert(0, os.environ["MIA_HERMES_SOURCE"])
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     os.environ["HERMES_DISABLE_LAZY_INSTALLS"] = "1"
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8")
     try:
+        from mia_shared_memory import install_from_environment
+        install_from_environment()
         result = remember(json.load(sys.stdin))
     except Exception:
         result = {"verified": False}

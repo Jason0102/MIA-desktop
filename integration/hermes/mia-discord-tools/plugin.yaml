@@ -1,0 +1,6 @@
+name: mia-discord-tools
+version: "3.2.0"
+description: Read public YouTube captions and create Discord document attachments.
+provides_tools:
+  - mia_youtube_captions
+  - mia_discord_document

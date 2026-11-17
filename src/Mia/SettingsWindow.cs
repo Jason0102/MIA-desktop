@@ -184,7 +184,7 @@ public sealed partial class SettingsWindow : Window
 
         async Task ClearAsync()
         {
-            if (MessageBox.Show(this, "將永久清除米亞的 Hermes 對話紀錄、內建長期記憶及個人偏好記憶。已產出的工作檔案會保留。確定要清除嗎？",
+            if (MessageBox.Show(this, "將永久清除 PC 對話紀錄，以及此使用者在 PC 與 Discord 共用的長期記憶和偏好。確定要清除嗎？",
                 "清除 Hermes 的記憶", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
             clear.IsEnabled = false;
             feedback.Text = "正在清除 Hermes 的記憶…";

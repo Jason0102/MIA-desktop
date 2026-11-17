@@ -4,19 +4,28 @@ import os
 import sys
 
 sys.path.insert(0, os.environ["MIA_HERMES_SOURCE"])
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 os.environ["HERMES_DISABLE_LAZY_INSTALLS"] = "1"
 
 if sys.argv[1:3] == ["gateway", "run"]:
     from pathlib import Path
-    sys.path.append(str(Path(__file__).resolve().parent))
-    from mia_discord import install_model_credentials
+    from mia_discord import install_model_credentials, restrict_attachment_paths
+    from mia_shared_memory import install_from_environment, refresh_prompts
     mia_home = Path(os.environ["HERMES_HOME"])
     install_model_credentials(mia_home, mia_home.parent / "mia" / "users.json")
+    shared_memory = install_from_environment(migrate=True)
+    if shared_memory:
+        refresh_prompts(shared_memory)
+    restrict_attachment_paths()
 
 from hermes_cli.main import main
 
 if __name__ == "__main__":
-    if sys.argv[1:] == ["mia-configure-calendar"]:
+    if sys.argv[1:] == ["mia-reset-memory"]:
+        from mia_shared_memory import install_from_environment, reset_current
+        install_from_environment()
+        reset_current()
+    elif sys.argv[1:] == ["mia-configure-calendar"]:
         from pathlib import Path
         from hermes_cli.mcp_config import _get_mcp_servers, _save_mcp_server
 
@@ -43,10 +52,6 @@ if __name__ == "__main__":
         print(f"{name}: {action}d")
     else:
         if sys.argv[1:3] == ["gateway", "run"]:
-            from pathlib import Path
-
-            # Isolated Python omits the entry script's directory from sys.path.
-            sys.path.append(str(Path(__file__).resolve().parent))
             from mia_session_cleanup import install
 
             install()

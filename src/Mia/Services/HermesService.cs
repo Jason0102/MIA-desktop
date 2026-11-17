@@ -377,7 +377,7 @@ public sealed class HermesService : IDisposable
         if (!File.Exists(executable) || !File.Exists(entry))
             throw new InvalidOperationException("找不到 Hermes 執行程式，請透過米亞啟動捷徑重新開啟。");
         var command = new ProcessStartInfo(executable!) { UseShellExecute = false, CreateNoWindow = true };
-        foreach (string argument in new[] { "-I", "-B", entry!, "memory", "reset", "--yes" }) command.ArgumentList.Add(argument);
+        foreach (string argument in new[] { "-I", "-B", entry!, "mia-reset-memory" }) command.ArgumentList.Add(argument);
         using var process = Process.Start(command) ?? throw new IOException("無法啟動 Hermes 記憶清除。");
         await process.WaitForExitAsync();
         if (process.ExitCode != 0) throw new IOException("Hermes 未能清除內建記憶，請檢查工作目錄中的設定。");
