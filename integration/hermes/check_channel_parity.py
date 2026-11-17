@@ -10,9 +10,9 @@ import types
 from contextlib import closing
 
 here = Path(__file__).resolve().parent
-sys.path[:0] = [str(here), str(here.parents[1] / ".mia-runtime/hermes/hermes-agent")]
+sys.path[:0] = [str(here), os.environ.get('MIA_HERMES_SOURCE') or str(here.parents[1] / ".mia-runtime/hermes/hermes-agent")]
 from hermes_constants import set_hermes_home_override, reset_hermes_home_override
-from mia_discord import prepare
+from mia_discord import prepare, role_instructions
 import hermes_yaml as yaml
 
 package = types.ModuleType("channel_fixture")
@@ -48,6 +48,10 @@ with tempfile.TemporaryDirectory() as folder:
         assert set(config["platform_toolsets"]["api_server"]) <= set(child["platform_toolsets"]["discord"])
         soul = (profile / "SOUL.md").read_text(encoding="utf-8")
         assert policy in soul and "[遠端訊息／Discord]" in soul
+        assert role_instructions(here.parents[1] / 'src/Mia/role.json') in soul
+        extra = child['platforms']['discord']['extra']
+        assert set(extra['user_allowed_commands']) == {'new', 'reset', 'stop', 'status', 'discard'}
+        assert user not in extra['allow_admin_from'], 'Conversation recovery must not grant administrator commands'
         with closing(sqlite3.connect(profile / "state.db")) as db:
             db.execute("CREATE TABLE sessions(id TEXT,source TEXT,user_id TEXT)")
             db.executemany("INSERT INTO sessions VALUES(?,?,?)",

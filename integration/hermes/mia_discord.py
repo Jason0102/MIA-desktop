@@ -110,8 +110,8 @@ def prepare(home, registry_path, role_path=None):
               "group_allow_from": subjects, "dm_policy": "allowlist", "group_policy": "allowlist",
               "allow_admin_from": ["mia-local-administrator"],
               "group_allow_admin_from": ["mia-local-administrator"],
-              "user_allowed_commands": ["new", "reset", "stop", "status"],
-              "group_user_allowed_commands": ["new", "reset", "stop", "status"],
+              "user_allowed_commands": ["new", "reset", "stop", "status", "discard"],
+              "group_user_allowed_commands": ["new", "reset", "stop", "status", "discard"],
               "allow_bots": "none", "max_attachment_bytes": 32 * 1024 * 1024,
               "reply_to_mode": "all", "text_batch_delay_seconds": 0, "text_batch_split_delay_seconds": 0}
     for binding in bindings:
@@ -145,6 +145,10 @@ def prepare(home, registry_path, role_path=None):
         atomic_write(directory / "SOUL.md", ((home / "SOUL.md").read_text(encoding="utf-8-sig") if (home / "SOUL.md").exists() else "") + "\n" + role +
                      "\n\n" + task_instructions +
                      "\n\n[遠端訊息／Discord] 目前管道為 Discord 訊息交流。用米亞的個性與自然台灣繁體中文直接回覆結果、必要限制和附件。"
+                     "Discord 與 PC 是同一位米亞，完整沿用上方人物設定、喜好與個性；不因改用文字就切換成制式客服或報告口吻。"
+                     "依人物設定自然展現活潑、好奇與溫暖：簡短確認、追問、任務結果、道歉和限制說明也要像米亞親自對使用者說話。"
+                     "可適量使用親切語尾、輕巧幽默、貓精靈語氣與表情符號，但不每句加喵、不過度撒嬌、不自行編造共同經歷。"
+                     "先回答重點，角色語氣融入句子而非另加一段表演；使用者要求精簡、正式或嚴肅情境時配合調整。"
                      "依訊息文字理解語境。只輸出文字及使用者要求的附件，省略語音、情緒標籤、肢體動作、查詢和製作過程。"
                      "一般訊息會延續近期已完成回覆的對話；使用者也可透過 Discord 回覆選取原任務，或用『新任務：』另開工作。"
                      "先結合本對話前文理解『當天』『那裡』等指代。使用者補充你問的條件後，接續完成原本要求，勿只確認條件或重問已知資訊。"
