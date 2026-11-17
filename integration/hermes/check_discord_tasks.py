@@ -8,7 +8,7 @@ import tempfile
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / '.mia-runtime/hermes/hermes-agent'), str(Path(__file__).parent)]
+sys.path[:0] = [os.environ.get('MIA_HERMES_SOURCE') or str(ROOT / '.mia-runtime/hermes/hermes-agent'), str(Path(__file__).parent)]
 
 
 async def check():
@@ -120,6 +120,33 @@ async def check():
         assert [item['Topics'] for item in events if item['Kind'] == 'chat' and item.get('TopicConfidence') == 'classified'] == [['音樂']]
         assert not InteractionMemory(state, 'other').read()
         assert not list((InteractionMemory(state, 'jason').root / InteractionMemory(state, 'jason').generation()).glob('active-*'))
+        # Natural, unquoted follow-ups reuse the same native session key.
+        from mia_discord_work import WorkMirror
+        from mia_discord_tasks import recent_conversation
+        from datetime import datetime, timezone, timedelta
+        mirror = WorkMirror(Path(folder) / 'hermes')
+        mirror.update(first, Status='completed')
+        followup = event('555')
+        followup.text = 'Which campus and day did we just discuss?'
+        await BasePlatformAdapter.handle_message(adapter, followup)
+        assert entered[-1][1] == entered[0][1], 'Unquoted follow-up lost native history'
+        assert recent_conversation(state, event('x').source, 'next') is None, 'Active task must not capture a parallel request'
+        mirror.update(followup, Status='completed')
+        explicit = event('666')
+        explicit.text = '新任務：independent work'
+        await BasePlatformAdapter.handle_message(adapter, explicit)
+        assert entered[-1][1] != entered[0][1]
+        assert recent_conversation(state, event('x', user='234567890123456789').source, 'next') is None
+        other_channel = event('x').source
+        other_channel.chat_id = 'different'
+        assert recent_conversation(state, other_channel, 'next') is None
+        mirror.update(first, Status='completed', UpdatedAt=(datetime.now(timezone.utc)-timedelta(hours=1)).isoformat())
+        for path in (state / 'discord-work').glob('*.json'):
+            data = json.loads(path.read_text(encoding='utf-8'))
+            data['UpdatedAt'] = (datetime.now(timezone.utc)-timedelta(hours=1)).isoformat()
+            path.write_text(json.dumps(data))
+        assert recent_conversation(state, first.source, 'next') is None, 'Expired conversation must not be adopted'
+        print('PASS: unquoted history continuity, explicit new tasks, active-task/channel/user isolation and expiry.')
         print('PASS: concurrent DM jobs, reply continuation, user isolation, durable source round-trip, quiet acknowledgements.')
         print('PASS: durable work-center snapshots, identity, lifecycle, results and attachments.')
         print('PASS: mixed Discord interactions, task continuation and exclusion of unbound topic labels.')

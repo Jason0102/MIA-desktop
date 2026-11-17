@@ -1,11 +1,38 @@
 """Independent Discord DM jobs on the same Hermes turn engine used by PC jobs.
 
-Each unquoted message starts a task. Discord Reply selects the original task.
+Unquoted messages continue a recent completed conversation. Discord Reply
+selects an explicit task; new-task prefixes and concurrent jobs stay separate.
 The durable route index is keyed by sender and channel, never by message text.
 """
 import os
 import sqlite3
 import sys
+import json
+import re
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from contextlib import closing
+
+
+def recent_conversation(state, source, text):
+    """Continue the latest finished turn for this sender, leaving concurrent jobs independent."""
+    if re.match(r"^\s*(?:新任務|另外一個任務|另開任務|new task)\s*[:：]", text or "", re.I):
+        return None
+    candidates = []
+    for path in (Path(state) / 'discord-work').glob('*.json'):
+        try:
+            item = json.loads(path.read_text(encoding='utf-8'))
+            if item.get('DiscordUserId') != source.user_id or item.get('ChannelId') != source.chat_id:
+                continue
+            at = datetime.fromisoformat(item['UpdatedAt'])
+            if timedelta(0) <= datetime.now(timezone.utc) - at <= timedelta(minutes=30):
+                candidates.append((at, item))
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    if not candidates:
+        return None
+    latest = max(candidates, key=lambda pair: pair[0])[1]
+    return latest.get('Task') if latest.get('Status') == 'completed' else None
 
 
 def install():
@@ -45,7 +72,7 @@ def install():
     SessionRecoveryMixin._find_gateway_session_row = find_task
     database = get_process_hermes_home().parent / 'mia' / 'discord-tasks.sqlite'
     database.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(database) as db:
+    with closing(sqlite3.connect(database)) as db, db:
         db.execute('CREATE TABLE IF NOT EXISTS routes (chat TEXT, user TEXT, message TEXT, task TEXT, PRIMARY KEY(chat,user,message))')
 
     def task_key(source, *args, **kwargs):
@@ -75,10 +102,16 @@ def install():
         raw_reply = getattr(getattr(event.raw_message, 'reference', None), 'resolved', None)
         if raw_reply and getattr(getattr(raw_reply, 'author', None), 'bot', False):
             reply = str(getattr(getattr(raw_reply, 'reference', None), 'message_id', '') or reply)
-        with sqlite3.connect(database) as db:
+        with closing(sqlite3.connect(database)) as db, db:
             row = db.execute('SELECT task FROM routes WHERE chat=? AND user=? AND message=?',
                              (source.chat_id, source.user_id, reply or event.message_id)).fetchone()
             task = row[0] if row else 'mia-task-' + event.message_id
+            continued = False
+            if not row and not reply and not event.get_command():
+                previous = recent_conversation(database.parent, source, event.text)
+                if previous:
+                    task = previous
+                    continued = True
             if (event.get_command() or reply) and not row:
                 # Unknown reply targets must not silently become unrelated tasks.
                 await adapter.send(source.chat_id, '請用 Discord「回覆」選取要操作的任務，再傳送指令。', reply_to=event.message_id)
@@ -87,7 +120,7 @@ def install():
                        (source.chat_id, source.user_id, event.message_id, task))
         source.chat_id_alt = task
         command = bool(event.get_command())
-        if not interactions.begin(event, task, bool(reply), command):
+        if not interactions.begin(event, task, bool(reply) or continued, command):
             await adapter.send(source.chat_id, '目前無法接收此訊息，請稍後再試。', reply_to=event.message_id)
             return
         try:

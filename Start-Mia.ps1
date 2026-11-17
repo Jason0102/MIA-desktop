@@ -22,6 +22,12 @@
 
 $ErrorActionPreference = 'Stop'
 $runtime = Join-Path $PSScriptRoot '.mia-runtime'
+if (-not (Test-Path -LiteralPath (Join-Path $runtime 'hermes/installs'))) {
+    $previousRuntime = Join-Path (Split-Path -Parent $PSScriptRoot) 'MIA-desktop-3.2/.mia-runtime'
+    if (Test-Path -LiteralPath (Join-Path $previousRuntime 'hermes/installs')) {
+        $runtime = $previousRuntime
+    }
+}
 $installHome = Join-Path $runtime 'hermes'
 $exe = Join-Path $PSScriptRoot 'dist/MIA-3.3-win-x64/MIA.exe'
 $service = $null

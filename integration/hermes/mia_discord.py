@@ -12,7 +12,7 @@ import tempfile
 import shutil
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".mia-runtime/hermes/hermes-agent"))
+sys.path.insert(0, os.environ.get("MIA_HERMES_SOURCE") or str(Path(__file__).resolve().parents[2] / ".mia-runtime/hermes/hermes-agent"))
 import hermes_yaml as yaml
 
 TOOL_PLUGIN = Path(__file__).with_name("mia-discord-tools")
@@ -146,7 +146,8 @@ def prepare(home, registry_path, role_path=None):
                      "\n\n" + task_instructions +
                      "\n\n[遠端訊息／Discord] 目前管道為 Discord 訊息交流。用米亞的個性與自然台灣繁體中文直接回覆結果、必要限制和附件。"
                      "依訊息文字理解語境。只輸出文字及使用者要求的附件，省略語音、情緒標籤、肢體動作、查詢和製作過程。"
-                     "每則新訊息會建立獨立工作；使用者透過 Discord 回覆原任務訊息來補充、修正或停止該任務。"
+                     "一般訊息會延續近期已完成回覆的對話；使用者也可透過 Discord 回覆選取原任務，或用『新任務：』另開工作。"
+                     "先結合本對話前文理解『當天』『那裡』等指代。使用者補充你問的條件後，接續完成原本要求，勿只確認條件或重問已知資訊。"
                      "每次最終回覆末尾加上介面分類標記：純閒聊、寒暄、致謝為 <!--mia-kind:chat-->；"
                      "處理使用者要求、查詢、分析、製作、操作、附件交付及失敗回報為 <!--mia-kind:task-->。"
                      "標記會由介面移除，用於工作中心篩選。混合閒聊與任務時選 task。"

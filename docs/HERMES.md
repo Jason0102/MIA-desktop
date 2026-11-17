@@ -4,7 +4,7 @@ MIA 維持桌面角色、對話與語音，透過只聽本機的 Hermes API 提�
 
 ## 安裝與執行
 
-需要 Windows x64、.NET 8 SDK（建置時）、原生 Codex CLI，以及 Hermes 支援的模型帳號。從 `3.2` 分支目錄開啟 PowerShell：
+需要 Windows x64、.NET 8 SDK（建置時）、原生 Codex CLI，以及 Hermes 支援的模型帳號。從 `3.3` 分支目錄開啟 PowerShell：
 
 ```powershell
 ./Install-Hermes.ps1
@@ -23,6 +23,10 @@ MIA 維持桌面角色、對話與語音，透過只聽本機的 Hermes API 提�
 金鑰會以 Windows DPAPI 儲存在「文件／MIA Workspace／state」，綁定目前使用者。請選擇自己的帳號可用且支援工具的模型。完成首次設定後，可使用 `啟動米亞.vbs` 或直接執行 `Start-Mia.ps1`。米亞結束時，啟動器會關閉這次啟動的 Gateway。`.mia-runtime` 提供 Hermes、Python 與 Codex 執行依賴，桌寵建置成品在 `dist/MIA-3.3-win-x64`。在另一台電腦請重新安裝及登入。
 
 ## 使用方式
+
+同一工作目錄已有 `MIA-desktop-3.2/.mia-runtime` 時，3.3 啟動器會在本版尚未安裝 Hermes 的情況下沿用該安裝。Python 虛擬環境保持原路徑，載入的 MIA 整合程式則來自 3.3；不要搬動虛擬環境。兩版沿用「文件／MIA Workspace／state」的設定、金鑰及使用者綁定，同一時間只啟動一版。若 3.3 有自己的安裝則優先使用。另一台電腦仍需重新安裝。
+
+Discord 私訊的一般追問會延續同一使用者、同一頻道最近 30 分鐘內已完成回覆的工作，保留原生 Hermes 對話上下文。使用「新任務：」前綴明確另開工作；上一工作尚在進行時，新訊息維持獨立並行。補充進行中的工作、切回較早工作或跨越 30 分鐘時，請使用 Discord「回覆」選取原訊息。未綁定使用者與其他頻道不會沿用此上下文。
 
 本機桌面目前綁定唯一使用者佳勳（Jason）。隨程式的 `users.json` 保存使用者與來源綁定，可在 `state/mia/users.json` 放置自訂設定覆寫。兩種對話模式都會附帶解析後的身分。來源與帳號須由傳輸端指定，未綁定來源不會沿用桌面身分；Discord 帳號綁定與跨使用者記憶隔離詳見下方說明。
 
