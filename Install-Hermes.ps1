@@ -36,6 +36,21 @@ $installArgs = @{
 & $portableInstaller @installArgs
 if ($LASTEXITCODE -ne 0) { throw "Hermes installation failed (exit $LASTEXITCODE)." }
 
+# Install the attachment/chat adapter into the same native Python used by Start-Mia.
+$discordPython = Get-ChildItem -LiteralPath (Join-Path $homePath 'installs') -Directory |
+    ForEach-Object {
+        $record = Join-Path $_.FullName 'facts.json'
+        if (Test-Path -LiteralPath $record) {
+            $facts = Get-Content -LiteralPath $record -Raw | ConvertFrom-Json
+            if ($facts.packages.venv.environment) { Join-Path $facts.packages.venv.environment 'Scripts/python.exe' }
+        }
+    } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+$discordUv = Get-ChildItem -LiteralPath (Join-Path $homePath 'tools') -Filter uv.exe -Recurse |
+    Select-Object -First 1 -ExpandProperty FullName
+if (-not $discordPython -or -not $discordUv) { throw 'Cannot locate the installed Hermes Python/uv runtime.' }
+& $discordUv pip install --python $discordPython 'discord.py==2.7.1' 'audioop-lts==0.2.2'
+if ($LASTEXITCODE -ne 0) { throw 'Discord adapter dependency installation failed.' }
+
 # Reuse an installed native Codex CLI and its matching Windows helper binaries.
 $codexSource = if ($CodexPath) { (Resolve-Path -LiteralPath $CodexPath).Path }
     else { (Get-Command codex.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source }

@@ -6,6 +6,10 @@
     [switch]$WorkCenter,
     [switch]$BrowserLogin,
     [switch]$EnableIsolatedCode,
+    [string]$DiscordUserId,
+    [string]$DiscordMiaUserId = 'local-jason',
+    [string]$DiscordDisplayName,
+    [string]$DiscordTokenFile,
     [string[]]$McpCommand,
     [string]$WebhookRules,
     [ValidateRange(1024,65535)][int]$WebhookPort = 8644,
@@ -62,7 +66,7 @@ try {
     $homePath = Join-Path $state 'hermes'
     $miaData = Join-Path $state 'mia'
     $launchLock = [IO.File]::Open((Join-Path $state 'launch.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
-    if (-not $GatewayOnly -and -not $Setup -and -not $McpCommand -and -not $SelfTestTaskFile) {
+    if (-not $GatewayOnly -and -not $Setup -and -not $McpCommand -and -not $SelfTestTaskFile -and -not $DiscordUserId -and -not $DiscordTokenFile) {
         $progressExe = if ($AppPath) { $AppPath } else { $exe }
         if (Test-Path -LiteralPath $progressExe -PathType Leaf) {
             $progressPath = Join-Path $workPath ('temp/launch-' + [guid]::NewGuid().ToString('N') + '.json')
@@ -253,6 +257,40 @@ try {
         $env:MIA_ISOLATED_CODE = $null
     }
     Invoke-Hermes config set platform_toolsets.api_server ('[' + ($toolsets -join ', ') + ']')
+    $identityPath = Join-Path $miaData 'users.json'
+    $discordKeyPath = Join-Path $state 'discord.key'
+    $discordEntry = Join-Path $PSScriptRoot 'integration/hermes/mia_discord.py'
+    if ($DiscordUserId) {
+        if (-not (Test-Path -LiteralPath $identityPath)) {
+            Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'src/Mia/users.json') -Destination $identityPath
+        }
+        $bindingArgs = @('-I','-B',$discordEntry,'--registry',$identityPath,'--bind',$DiscordUserId,'--user',$DiscordMiaUserId)
+        if ($DiscordDisplayName) { $bindingArgs += @('--name',$DiscordDisplayName) }
+        & $hermes @bindingArgs
+        if ($LASTEXITCODE -ne 0) { throw 'Discord identity binding failed.' }
+    }
+    if ($DiscordTokenFile) {
+        $discordToken = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $DiscordTokenFile).Path).Trim()
+        if ($discordToken -match '(?im)^\s*\[discord\]\s*$') {
+            $discordSection = [regex]::Match($discordToken, '(?ims)^\s*\[discord\]\s*\r?\n(.*?)(?=^\s*\[|\z)').Groups[1].Value
+            $discordToken = [regex]::Match($discordSection, '(?im)^\s*token\s*=\s*(\S+)\s*$').Groups[1].Value
+            Remove-Variable discordSection
+        }
+        if (-not $discordToken -or $discordToken -match '\s') { throw 'The file must contain only the Discord Bot Token.' }
+        ConvertTo-SecureString -String $discordToken -AsPlainText -Force | ConvertFrom-SecureString |
+            Set-Content -LiteralPath $discordKeyPath -Encoding ASCII
+        Remove-Variable discordToken
+    }
+    if (Test-Path -LiteralPath $discordKeyPath) {
+        $discordSecret = (Get-Content -LiteralPath $discordKeyPath -Raw).Trim() | ConvertTo-SecureString
+        $env:DISCORD_BOT_TOKEN = [Net.NetworkCredential]::new('', $discordSecret).Password
+        Remove-Variable discordSecret
+        & $hermes -I -B -c 'import discord'
+        if ($LASTEXITCODE -ne 0) { throw 'Discord dependency missing. Install discord.py==2.7.1 into the MIA Hermes Python environment.' }
+        & $hermes -I -B $discordEntry --registry $identityPath
+        if ($LASTEXITCODE -ne 0) { throw 'Discord profile preparation failed.' }
+    }
+    if ($DiscordUserId -or $DiscordTokenFile) { Write-Output 'Discord settings saved. Start MIA normally to connect.'; return }
     Set-LaunchProgress 64 '啟動 Hermes，等待連線…'
     $arguments = @('-I','-B',('"{0}"' -f $entry),'gateway','run')
     $service = Start-Process -FilePath $hermes -ArgumentList $arguments -WorkingDirectory $workPath -WindowStyle Hidden -PassThru `

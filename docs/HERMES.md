@@ -75,6 +75,28 @@ Hermes 的 clarify／approval 詢問會在對話顯示任務名稱與問題，�
 - 在對話中可以請米亞新增、查詢、預覽、修改或取消個人事件。日曆事件存入 MIA Workspace 的 SQLite，並支援全天和重複事件。衝突檢查先比較時間，再用 Google Maps 的網頁路線查詢估算前後交通。缺少地點或網頁無法查指定時段，米亞會說明該段交通尚未確認。此行事曆流程暫無提前提醒。
 - 如需在一次 Python 執行中組合 Hermes 工具，先安裝並啟動使用 Linux 容器的 Docker Desktop，再用 `./Start-Mia.ps1 -EnableIsolatedCode` 啟動。腳本在獨立容器執行，限制 60 秒與 12 次工具呼叫，容器無主機目錄掛載及直接網路。經 Hermes 提供的工具呼叫仍適用個別工具的權限及網路設定。需要下載容器映像時，由 Docker 主機完成下載。
 
+## Discord 身分與資料分區
+
+Discord 連線準備工具已接入啟動器，實際啟用須有 Bot Token 與完整的數字 User ID。先退出米亞，再執行：
+
+```powershell
+./Start-Mia.ps1 -DiscordUserId '完整數字UserID' -DiscordTokenFile 'C:\private\mia-discord-token.txt'
+```
+
+預設綁定到 `local-jason`（佳勳／Jason）。新增其他使用者時指定 `-DiscordMiaUserId` 及 `-DiscordDisplayName`。電子郵件和使用者名稱不作為身分驗證。設定保存到 `state/mia/users.json`，Bot Token 使用 Windows DPAPI 保存到 `state/discord.key`，綁定目前 Windows 使用者。以原本的 VBS 啟動時會讀取該設定。
+
+每個 Discord 帳號使用 `state/hermes/profiles/mia-discord-<UserID>`，獨立保存會話、記憶及技能，`identity.json` 記錄其 MIA 使用者與 Discord 來源。本機既有資料留在原本的 `state/hermes`。同一人的兩個來源也分開保存。僅登錄的帳號可使用 Bot，管理指令保留在本機執行。
+
+Discord 使用 Hermes 原生圖片、音訊、影片及文件附件傳輸，單個接收檔案上限 32 MiB，傳送仍受 Discord 的伺服器限制。附件傳輸與內容理解依模型及格式能力而定。遠端 profile 不載入本機桌面操作及 C 槽 Codex 插件。
+
+2026-11-17 實測：正式啟動器的 Discord Gateway 上線成功；產生的文字、PNG、WAV 附件傳送後重新下載，比對內容一致；綁定使用者私訊傳入圖片後，原生視覺路由成功，模型約 18 秒回覆圖片描述及綁定身分，會話保存在該 Discord profile。第二個真實帳號、影片及音訊轉錄尚未實測；多使用者路由與記憶持久隔離已通過離線測試。
+
+安裝器會安裝 `discord.py==2.7.1` 與 `audioop-lts==0.2.2`。Bot 須在 Discord Developer Portal 開啟 Message Content Intent，邀請時允許檢視頻道、讀取歷史、傳送訊息及附加檔案。Token 檔可僅包含 Token，或使用既有 `api_key` 的 `[discord]` 區段與 `token = ...` 欄位；不要提交至版本庫。Discord 分區在記憶體中取得明確授權的模型 API 金鑰，不會繼承 Bot Token 或其他桌面憑證。
+
+伺服器頻道中請標記 MIA Bot 本身（APP），不是同名身分組；也可私訊 Bot。音訊附件與語音頻道通話不同，目前整合的是附件傳輸。
+
+離線隔離測試：使用 Hermes Python 執行 `integration/hermes/check_discord_identity.py`。實際附件測試可執行 `integration/hermes/check_discord_live.py --token-file api_key --channel <頻道ID>`；這會在指定頻道傳送產生的文字、PNG 和 WAV 檔，重新下載並比對內容。使用者傳入附件與模型回覆須另外驗證。
+
 ## MCP 外部工具
 
 內附本機行事曆伺服器會在啟動時註冊。要設定其他 MCP 伺服器，先結束 MIA，再從專案目錄執行下列命令。新增時使用服務提供的 URL 或受信任的 stdio 命令，依服務要求選 OAuth 或標頭授權。重新啟動 MIA 後，啟用的工具可用於米亞任務。

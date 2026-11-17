@@ -6,6 +6,13 @@ import sys
 sys.path.insert(0, os.environ["MIA_HERMES_SOURCE"])
 os.environ["HERMES_DISABLE_LAZY_INSTALLS"] = "1"
 
+if sys.argv[1:3] == ["gateway", "run"]:
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).resolve().parent))
+    from mia_discord import install_model_credentials
+    mia_home = Path(os.environ["HERMES_HOME"])
+    install_model_credentials(mia_home, mia_home.parent / "mia" / "users.json")
+
 from hermes_cli.main import main
 
 if __name__ == "__main__":
