@@ -173,7 +173,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'integration/hermes/SOUL.md') -Destination $soul
     }
     $plugin = Join-Path $homePath 'plugins/mia-codex'
-    foreach ($name in @('plugin.yaml','__init__.py','bridge.py','extensions.py','history.py','browser_tools.py','scheduled_tasks.py','webhook_events.py','isolated_code.py','work_cards.py','templates.py','desktop_tools.py','permissions.py','powerpoint.ps1')) {
+    foreach ($name in @('plugin.yaml','__init__.py','bridge.py','extensions.py','history.py','browser_tools.py','scheduled_tasks.py','webhook_events.py','isolated_code.py','work_cards.py','templates.py','desktop_tools.py','voice_export.py','permissions.py','powerpoint.ps1')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot "integration/hermes/mia-codex/$name") -Destination $plugin
     }
     $calendarSkill = Join-Path $homePath 'skills/mia-calendar'
@@ -224,6 +224,7 @@ try {
     $env:MIA_HERMES_KEY = $env:API_SERVER_KEY
     $env:MIA_START_LAUNCHER = $PSCommandPath
     $env:MIA_DATA_DIR = $miaData
+    $env:MIA_VOICE_EXPORT_EXE = if ($AppPath) { (Resolve-Path -LiteralPath $AppPath).Path } else { $exe }
     $env:MIA_CRON_DELIVERY_ENABLED = 'true'
     $env:MIA_CRON_HOME_CHANNEL = 'desktop'
     $env:MIA_WEBHOOK_RULES = if ($WebhookRules) { (Resolve-Path -LiteralPath $WebhookRules).Path } else { $null }

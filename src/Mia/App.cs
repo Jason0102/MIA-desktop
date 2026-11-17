@@ -36,6 +36,8 @@ public sealed partial class App : Application
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--export-voice")
+            return VoiceExport.Run(args[1]);
         if (args.Length == 3 && args[0] == "--loading" && int.TryParse(args[2], out int launcher))
             return new Application().Run(new LoadingWindow(args[1], launcher));
         if(args.Length==2 && args[0]=="--dock-fixture") { InteractionDiagnostics.RunFixture(args[1]);return 0; }

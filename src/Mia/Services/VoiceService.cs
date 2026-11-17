@@ -49,12 +49,7 @@ public sealed class VoiceService : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_settings.Muted || !SpeechTags.HasWords(text)) return;
-        RequireKey();
-        if (string.IsNullOrWhiteSpace(_settings.VoiceId))
-            throw new InvalidOperationException("請先設定 Voice ID，或使用 kiri_* 素材建立聲線。");
-        // Respect the requested model; never silently substitute another generation.
-        if (_settings.ElevenLabsModel != "eleven_v4")
-            throw new InvalidOperationException("此版本語音指定使用 eleven_v4，請檢查模型設定。");
+        RequireVoice();
 
         using var session = CancellationTokenSource.CreateLinkedTokenSource(ct);
         session.CancelAfter(TimeSpan.FromMinutes(5));
@@ -175,6 +170,26 @@ public sealed class VoiceService : IDisposable
         if (!_dispatcher.CheckAccess()) return _dispatcher.InvokeAsync(action, DispatcherPriority.Send).Task;
         action();
         return Task.CompletedTask;
+    }
+
+    private void RequireVoice()
+    {
+        RequireKey();
+        if (string.IsNullOrWhiteSpace(_settings.VoiceId))
+            throw new InvalidOperationException("請先在米亞設定 Voice ID。");
+        if (_settings.ElevenLabsModel != "eleven_v4")
+            throw new InvalidOperationException("此版本語音指定使用 eleven_v4，請檢查模型設定。");
+    }
+
+    internal async Task ExportAsync(string text, string destination, CancellationToken ct)
+    {
+        RequireVoice();
+        string spoken = SpeechTags.SpokenText(text.Trim(), readUrls: true);
+        if (spoken.Length > 5000 || !SpeechTags.HasWords(spoken))
+            throw new ArgumentException("請提供 1 至 5000 字的語音稿。");
+        string temporary = await GenerateFileAsync(spoken, ct);
+        try { File.Move(temporary, destination); }
+        finally { TryDelete(temporary); }
     }
 
     private async Task<string> GenerateFileAsync(string chunk,CancellationToken ct)
