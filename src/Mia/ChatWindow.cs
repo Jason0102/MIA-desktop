@@ -47,7 +47,7 @@ public sealed partial class ChatWindow : Window
 
     public ChatWindow(App app)
     {
-        _app=app; Title="米亞 MIA 3.2 · 對話"; Width=380; MinWidth=280; MinHeight=56;
+        _app=app; Title="米亞 MIA 3.2 · 直接對話"; Width=380; MinWidth=280; MinHeight=56;
         SizeToContent=SizeToContent.Height; Ui.Style(this);
         var root=new StackPanel(); Content=root;
         var details=new StackPanel { Margin=new Thickness(14) };
@@ -63,7 +63,7 @@ public sealed partial class ChatWindow : Window
         _detailScroll.Content=details; _details.Child=_detailScroll; _details.CornerRadius=new CornerRadius(16);
         _details.Background=new SolidColorBrush(Color.FromArgb(205,56,56,56));
         _details.Margin=new Thickness(0,0,0,8); root.Children.Add(_details);
-        var capsule=new Border { Height=56, CornerRadius=new CornerRadius(28),
+        var capsule=new Border { MinHeight=56, CornerRadius=new CornerRadius(28),
             Background=new SolidColorBrush(Color.FromArgb(170,100,100,100)), Padding=new Thickness(20,8,10,8) };
         _capsule = capsule;
         var row=new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition());
@@ -102,9 +102,13 @@ public sealed partial class ChatWindow : Window
 
         _input.Background=Brushes.Transparent; _input.BorderThickness=new Thickness(0);
         _input.Padding=new Thickness(0,7,8,0); _input.Margin=new Thickness(0);
-        _input.Height=38; _input.AcceptsReturn=false; _input.MaxLength=8000;
+        _input.Height=double.NaN; _input.MinHeight=38; _input.MaxHeight=260;
+        _input.TextWrapping=TextWrapping.Wrap;
+        _input.VerticalScrollBarVisibility=ScrollBarVisibility.Auto;
+        _input.HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled;
+        _input.AcceptsReturn=true; _input.MaxLength=8000;
         _input.VerticalContentAlignment=VerticalAlignment.Center;
-        _input.ToolTip="輸入文字後按 Enter 傳送";
+        _input.ToolTip="Enter 傳送，Shift + Enter 換行";
         _input.TextChanged+=(_,_)=>placeholder.Visibility=string.IsNullOrEmpty(_input.Text)?Visibility.Visible:Visibility.Collapsed;
         inputLayer.Children.Add(_input);
         TextCompositionManager.AddPreviewTextInputStartHandler(_input,(_,_)=>_composing=true);
@@ -119,7 +123,7 @@ public sealed partial class ChatWindow : Window
         _input.LostKeyboardFocus+=(_,_)=>{_composing=false;_commitPending=false;app.Pet.BeginListening(false);};
         _input.PreviewKeyDown+=(_,e)=>
         {
-            if(ShouldSubmitEnter(e.Key,_composing,_commitPending)) {e.Handled=true;_=SendAsync();}
+            if(ShouldSubmitEnter(e.Key,_composing,_commitPending) && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) {e.Handled=true;_=SendAsync();}
         };
         _send=IconButton("\uE122","傳送",()=>_=SendAsync()); Grid.SetColumn(_send,1);row.Children.Add(_send);
         var capture=IconButton("\uE722","框選畫面",()=>_=CaptureAsync(false)); Grid.SetColumn(capture,2);row.Children.Add(capture);

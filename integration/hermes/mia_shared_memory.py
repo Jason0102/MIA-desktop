@@ -104,7 +104,10 @@ def refresh_prompts(current):
         binding = current()
         if binding and agent._memory_store:
             home, _channel = binding
+            from mia_learning import context
+            learning = context(home / "learning.sqlite", _channel, args[0] if args else "")
             digest = sha256()
+            digest.update(learning.encode("utf-8"))
             for path in [*(home / name for name in FILES), get_hermes_home() / "SOUL.md",
                          Path(__file__), Path(__file__).with_name("mia_discord.py")]:
                 try:
@@ -119,7 +122,7 @@ def refresh_prompts(current):
                 invalidate_system_prompt(agent)
             agent._mia_memory_revision = revision
             positional = list(args)
-            positional[1] = (positional[1] or "") + "\n" + revision
+            positional[1] = (positional[1] or "") + "\n" + revision + learning
             args = tuple(positional)
         return build_context(agent, *args, **kwargs)
 
@@ -146,3 +149,9 @@ def reset_current():
         if path.parent.is_dir():
             with MemoryStore._file_lock(path):
                 path.unlink(missing_ok=True)
+    path = get_memory_dir() / "learning.sqlite"
+    if path.exists():
+        from mia_learning import database
+        with database(path) as db:
+            db.execute("DELETE FROM turns")
+            db.execute("DELETE FROM revisions")

@@ -34,7 +34,9 @@ async def check():
     async def deliver_notice(runner, source, content):
         delivered_notices.append(content)
     GatewayNotificationsMixin._deliver_platform_notice = deliver_notice
+    extracted_inputs = []
     async def extracted(adapter, response, event, *args, **kwargs):
+        extracted_inputs.append(response)
         return SimpleNamespace(text_content='Done', media_files=[('example.pdf', False)], local_files=[])
     BasePlatformAdapter._extract_response_content = extracted
     with tempfile.TemporaryDirectory(dir=ROOT / '.mia-runtime') as folder:
@@ -91,13 +93,15 @@ async def check():
             db.close()
         assert os.environ['HERMES_GATEWAY_BUSY_ACK_ENABLED'] == 'false'
         await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_start', first)
-        await BasePlatformAdapter._extract_response_content(adapter, 'Done', first, entered[0][1])
+        await BasePlatformAdapter._extract_response_content(adapter, 'Done<!--mia-kind:task-->', first, entered[0][1])
+        assert extracted_inputs[-1] == 'Done', 'Internal classification must not reach Discord'
         await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_complete', first, ProcessingOutcome.SUCCESS)
         snapshots = [json.loads(p.read_text()) for p in (state / 'discord-work').glob('*.json')]
         completed = next(s for s in snapshots if s['Task'] == 'mia-task-111')
         assert completed['UserId'] == 'jason' and completed['Reply'] == 'Done'
         assert completed['Files'] == ['example.pdf'] and completed['Status'] == 'completed'
         assert completed['StartedAt']
+        assert completed['Kind'] == 'task'
         await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_complete', second, ProcessingOutcome.FAILURE)
         snapshots = [json.loads(p.read_text()) for p in (state / 'discord-work').glob('*.json')]
         assert next(s for s in snapshots if s['Task'] == 'mia-task-222')['Status'] == 'failed'

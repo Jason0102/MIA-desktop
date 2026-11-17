@@ -128,6 +128,8 @@ public sealed partial class ChatWindow
                 }, additionalInstructions: """
                     你是米亞持續的主對話。根據此會話歷史、使用者此次訊息與下方任務索引，
                     判斷是閒聊/問答(chat)、需要工具的獨立工作(new)、補充或修改既有任務(supplement)、查找曾交付的成果(find)。
+                    「可以幫我／你可以」開啟應用程式、操作桌面、在小畫家畫圖等是實際操作要求，必須選 new。
+                    即使句尾是問號，也要派發工作。message 只能表示開始處理，不能用閒聊回答代替執行。
                     若訊息是在回答下方待確認詢問，選 answer，target 必須填入該詢問的 QuestionId（不是任務 Id）。
                     同時有多個詢問而回答未明確指定對象時，選 chat 請使用者選擇，絕不可猜測。
                     回答內容由介面原文送回原任務；message 只說正在送出，不宣稱已核准或繼續執行。
