@@ -150,6 +150,8 @@ def prepare(home, registry_path, role_path=None):
                      "每次最終回覆末尾加上介面分類標記：純閒聊、寒暄、致謝為 <!--mia-kind:chat-->；"
                      "處理使用者要求、查詢、分析、製作、操作、附件交付及失敗回報為 <!--mia-kind:task-->。"
                      "標記會由介面移除，用於工作中心篩選。混合閒聊與任務時選 task。"
+                     "如果這次使用者發話含閒聊，另外附上 <!--mia-chat:分類1,分類2-->，純任務省略。"
+                     "分類僅可使用生活日常、飲食、電影與戲劇、音樂、閱讀、遊戲、旅行、科技、寵物、天氣、其他閒聊，禁止寫原文、附件內容或個資。"
                      "\n目前互動身分（由本機管理員綁定）：" + json.dumps(identity, ensure_ascii=False) +
                      "\n長期記憶依目前 MIA 使用者身分與其已綁定的 PC／Discord 共用。"
                      "記憶的 [PC] 與 [Discord] 標記表示來源。對話歷史及技能仍屬於各自的管道分區。"
@@ -208,7 +210,8 @@ def restrict_attachment_paths():
             return None
         root = get_process_hermes_home()
         file = Path(resolved)
-        if file.is_relative_to(root.parent / "mia" / "memory"):
+        interaction_state = Path(os.environ.get("MIA_DATA_DIR") or root.parent / "mia").resolve()
+        if file.is_relative_to(root.parent / "mia" / "memory") or file.is_relative_to(interaction_state / "interaction-memory"):
             return None
         return resolved
 

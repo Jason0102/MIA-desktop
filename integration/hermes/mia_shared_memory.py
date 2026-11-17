@@ -106,8 +106,14 @@ def refresh_prompts(current):
             home, _channel = binding
             from mia_learning import context
             learning = context(home / "learning.sqlite", _channel, args[0] if args else "")
+            mood = ""
+            if _channel == "Discord":
+                from mia_interaction_mood import context as mood_context
+                state = Path(os.environ.get("MIA_DATA_DIR") or home.parent.parent)
+                mood = mood_context(state, home.name, args[0] if args else "")
             digest = sha256()
             digest.update(learning.encode("utf-8"))
+            digest.update(mood.encode("utf-8"))
             for path in [*(home / name for name in FILES), get_hermes_home() / "SOUL.md",
                          Path(__file__), Path(__file__).with_name("mia_discord.py")]:
                 try:
@@ -122,7 +128,7 @@ def refresh_prompts(current):
                 invalidate_system_prompt(agent)
             agent._mia_memory_revision = revision
             positional = list(args)
-            positional[1] = (positional[1] or "") + "\n" + revision + learning
+            positional[1] = (positional[1] or "") + "\n" + revision + learning + mood
             args = tuple(positional)
         return build_context(agent, *args, **kwargs)
 

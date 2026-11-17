@@ -53,6 +53,7 @@ internal static class HermesChecks
                 using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
                 check(body.RootElement.GetProperty("model_options").GetProperty("reasoning_effort").GetString() == "medium", "Hermes sends explicit per-request reasoning effort");
                 check(body.RootElement.GetProperty("instructions").GetString()!.Contains(SpeechTags.Instructions), "Hermes receives speech and EMO instructions");
+                check(body.RootElement.GetProperty("instructions").GetString()!.Contains("米亞的互動心情快照"), "Hermes receives this turn's interaction mood");
                 string? sessionId = body.RootElement.GetProperty("session_id").GetString();
                 session ??= sessionId;
                 check(sessionId == session && request.Headers.Contains("Idempotency-Key"), "Hermes keeps its conversation and scopes admissions by idempotency key");

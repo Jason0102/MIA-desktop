@@ -55,7 +55,8 @@ public sealed class AiService : IDisposable
     public Task<string> ReplyAsync(string text, byte[]? imagePng, CancellationToken ct)
         => ReplyWithImagesAsync(text,imagePng is null?Array.Empty<byte[]>():new[]{imagePng},ct);
 
-    public async Task<string> ReplyWithImagesAsync(string text, IReadOnlyList<byte[]> images, CancellationToken ct, Action<string>? onDelta = null)
+    public async Task<string> ReplyWithImagesAsync(string text, IReadOnlyList<byte[]> images, CancellationToken ct,
+        Action<string>? onDelta = null, MoodSnapshot? mood = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (string.IsNullOrWhiteSpace(_settings.OpenAiKey))
@@ -83,8 +84,9 @@ public sealed class AiService : IDisposable
             LastReasoningEffort = SelectReasoning(text, images.Count);
             var configuration = new { type = "configuration_update", reasoning = new { effort = LastReasoningEffort } };
             input.Add(configuration);
-            // Keep the static persona/cache prefix stable; refresh only this turn's local clock.
-            var timeContext=new { role = "developer", content = RoleProfile.TimeContext(DateTimeOffset.Now,TimeZoneInfo.Local.Id) + "\n" + UserIdentity.Context("desktop", "local") };
+            // Keep the static persona/cache prefix stable while refreshing the local context for this turn.
+            var timeContext = new { role = "developer", content = RoleProfile.TimeContext(DateTimeOffset.Now, TimeZoneInfo.Local.Id) +
+                "\n" + UserIdentity.Context("desktop", "local") + "\n" + InteractionMood.Prompt(mood ?? InteractionMood.Desktop(), text) };
             input.Add(timeContext);
             input.Add(new { role = "user", content });
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");

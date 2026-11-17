@@ -76,7 +76,8 @@ public sealed class HermesService : IDisposable
 
     public async Task<string> ReplyAsync(string text, IReadOnlyList<byte[]> images, CancellationToken cancellationToken,
         Func<HermesUpdate, Task> onUpdate, bool independentTask = false,
-        string? taskSession = null, string? additionalInstructions = null, bool saveHistory = true, string reasoningEffort = "medium")
+        string? taskSession = null, string? additionalInstructions = null, bool saveHistory = true,
+        string reasoningEffort = "medium", MoodSnapshot? mood = null)
     {
         if (reasoningEffort is not ("low" or "medium" or "high")) throw new ArgumentException("無效的推理強度。");
         cancellationToken.ThrowIfCancellationRequested();
@@ -86,7 +87,8 @@ public sealed class HermesService : IDisposable
         string sessionId = taskSession ?? (independentTask ? Guid.NewGuid().ToString("N") : _sessionId ??= Guid.NewGuid().ToString("N"));
         if (!independentTask && taskSession is null) SaveSession(sessionId);
         string instructions = _role.Instructions + "\n" + RoleProfile.TimeContext(DateTimeOffset.Now, TimeZoneInfo.Local.Id) + "\n" + File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "task-policy.md"));
-        instructions += "\n" + UserIdentity.Context("desktop", "local") + "\n" + SpeechTags.Instructions;
+        instructions += "\n" + UserIdentity.Context("desktop", "local") + "\n" + SpeechTags.Instructions +
+            "\n" + InteractionMood.Prompt(mood ?? InteractionMood.Desktop(), text);
         if (additionalInstructions is not null) instructions += "\n" + additionalInstructions;
         object input = text;
         if (images.Count > 0)

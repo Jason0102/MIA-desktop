@@ -47,7 +47,7 @@ public sealed partial class PetWindow : Window
         MarkInteraction();
         NativeDesktop.GetWindowRect(hwnd,out var body);
         double ballX=x+body.Width*.65,ballY=perch==IntPtr.Zero?y:previousPerch.Top-42*body.Width/192.0;
-        ball=new ToyBallWindow(this,ballX,ballY);ball.Closed+=(_,_)=>ball=null;ball.Show();
+        ball=new ToyBallWindow(this,ballX,ballY);ball.Closed+=(_,_)=>{SealBallInteraction();ball=null;};ball.Show();
         if(perch!=IntPtr.Zero)ball.AttachToWindow(perch,35*body.Width/192.0);
     }
     private readonly Image sprite=new() { Stretch=Stretch.Fill };
@@ -135,7 +135,7 @@ public sealed partial class PetWindow : Window
         RenderOptions.SetBitmapScalingMode(sprite,BitmapScalingMode.HighQuality);
         animations=new PetAnimationBank(Path.Combine(AppContext.BaseDirectory,"Assets","Interactions"));
         LoadFrames();ShowFrame(frames[(0,0)]);
-        MouseRightButtonUp+=(_,e)=>{MarkInteraction();ChatRequested?.Invoke();e.Handled=true;};
+        MouseRightButtonUp+=(_,e)=>{RecordDesktopInteraction("click",cooldown:.3);MarkInteraction();ChatRequested?.Invoke();e.Handled=true;};
         MouseLeftButtonDown+=OnDown;MouseLeftButtonUp+=OnUp;MouseMove+=OnMove;
         LostMouseCapture+=(_,_)=>{if(dragging)ReleaseDrag();};
         MouseLeave+=(_,_)=>pettingDistance=0;
@@ -146,7 +146,7 @@ public sealed partial class PetWindow : Window
         {
             if(!initialized||stopped)return;
             if(IsVisible){nextTopmostCheck=0;lastTick=DateTime.UtcNow;timer.Start();}
-            else {timer.Stop();dockHint?.Hide();if(dragging){ReleaseDrag();ReleaseMouseCapture();}}
+            else {timer.Stop();FlushInteractionIntervals();dockHint?.Hide();if(dragging){ReleaseDrag();ReleaseMouseCapture();}}
         };
         Closed+=(_,_)=>Stop();
     }
@@ -192,7 +192,7 @@ public sealed partial class PetWindow : Window
     }
     public void Stop()
     {
-        if(stopped)return;stopped=true;timer.Stop();dockHint?.Close();focusHint?.Close();ball?.Close();
+        if(stopped)return;stopped=true;timer.Stop();FlushInteractionIntervals();dockHint?.Close();focusHint?.Close();ball?.Close();
         dragging=false;if(IsMouseCaptured)ReleaseMouseCapture();source?.RemoveHook(WindowHook);
     }
     private static double GroundAnchor(double height)=>height*203/208;
@@ -229,7 +229,7 @@ public sealed partial class PetWindow : Window
         }else pettingDistance=0;
         lastTouch=p;
     }
-    private void PetHead(){MarkInteraction();pettedAt=DateTime.UtcNow;touchCooldown=pettedAt.AddSeconds(2);}
+    private void PetHead(){RecordDesktopInteraction("pet",cooldown:2);MarkInteraction();pettedAt=DateTime.UtcNow;touchCooldown=pettedAt.AddSeconds(2);}
     private void TouchCharacter(Point position)
     {
         if(position.Y<Height*.48 || (perch!=IntPtr.Zero&&perchSeated))PetHead();
@@ -241,6 +241,7 @@ public sealed partial class PetWindow : Window
         if(!dragMoved)
         {
             dragging=false;dockCandidate=null;dockHint?.Hide();ReleaseMouseCapture();
+            RecordDesktopInteraction("click",cooldown:.3);
             TouchCharacter(e.GetPosition(sprite));
         }
         else {ReleaseDrag();ReleaseMouseCapture();}
@@ -263,6 +264,7 @@ public sealed partial class PetWindow : Window
     {
         bool moved=dragMoved;dragging=false;dragMoved=false;dockCandidate=null;dockHint?.Hide();
         if(!moved)return;
+        RecordDesktopInteraction("drag",cooldown:.3);
         grounded=false;velocityY=0;perch=IntPtr.Zero;
         NativeDesktop.GetWindowRect(hwnd,out var b);x=b.Left;y=b.Top;
         // Re-query bounds and occlusion at release; a prior hover candidate may have moved/closed.
@@ -314,6 +316,7 @@ public sealed partial class PetWindow : Window
             NativeDesktop.RestorePetTopmost(hwnd,b);
         }
         x=b.Left;y=b.Top;
+        TrackDesktopInteraction(now,cursor,width,height);
         var area=AllowedWorkArea(new NativeDesktop.Point {X=(int)x+width/2,Y=(int)y+height/2});
         FocusTimer.Tick(Math.Max(0,(now-lastFocusTick).TotalSeconds),Paused);lastFocusTick=now;
         if(FocusTimer.Completed)(focusHint??=new DockHintWindow()).Place(x+width/2,y,"專注完成 · 起身伸展，喝點水吧");

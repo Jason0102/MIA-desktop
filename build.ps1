@@ -1,4 +1,4 @@
-param([switch]$Test, [string]$OutputDirectory='dist/MIA-3.2-win-x64', [string]$DotnetPath)
+﻿param([switch]$Test, [string]$OutputDirectory='dist/MIA-3.3-win-x64', [string]$DotnetPath)
 $ErrorActionPreference='Stop'
 $projectRoot=$PSScriptRoot
 $env:DOTNET_CLI_HOME=Join-Path $projectRoot '.tools/home'

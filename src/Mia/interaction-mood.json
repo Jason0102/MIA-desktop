@@ -1,0 +1,23 @@
+{
+  "baseline": [50, 42, 30, 32],
+  "recentHalfLifeHours": 18,
+  "affinityHalfLifeHours": 504,
+  "windowDays": 90,
+  "signals": {
+    "chat": { "label": "日常聊天", "effects": [3, 1, 1.4, 0.6], "dailyCap": 3 },
+    "pet": { "label": "摸頭", "effects": [3, 0.4, 1, 1], "dailyCap": 2 },
+    "click": { "label": "點擊互動", "effects": [0.7, 0.4, 0.12, 0.6], "dailyCap": 2 },
+    "cursor_dwell": { "label": "游標停留", "effects": [0.5, 0.3, 0.1, 0.4], "dailyCap": 2 },
+    "drag": { "label": "拖曳互動", "effects": [0.4, 0.6, 0.14, 0.8], "dailyCap": 2 },
+    "ball_throw": { "label": "一起投球", "effects": [2, 2.4, 0.5, 3.6], "dailyCap": 3 },
+    "ball_active": { "label": "一起玩球", "effects": [2, 3, 0.85, 5], "dailyCap": 3 },
+    "task_result": { "label": "一起完成工作", "effects": [3, 1, 1, 0.1], "dailyCap": 3 }
+  },
+  "states": [
+    { "dimension": 3, "threshold": 49, "label": "俏皮" },
+    { "dimension": 1, "threshold": 56, "label": "活潑" },
+    { "dimension": 0, "threshold": 60, "label": "愉快" }
+  ],
+  "defaultState": "平穩",
+  "defaultReason": "近期有效互動較少，維持角色基準"
+}

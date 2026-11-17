@@ -92,7 +92,7 @@ public sealed partial class App : Application
         _handle=new WindowInteropHelper(Pet).Handle;
         HwndSource.FromHwnd(_handle)?.AddHook(WindowHook);
         bool hotkey=RegisterHotKey(_handle,1,0x0002|0x0004|0x4000,0x4D);
-        _tray=new Forms.NotifyIcon { Icon=System.Drawing.SystemIcons.Information, Text="米亞 MIA 3.2 · 桌面夥伴", Visible=true };
+        _tray=new Forms.NotifyIcon { Icon=System.Drawing.SystemIcons.Information, Text="米亞 MIA 3.3 · 桌面夥伴", Visible=true };
         var menu=new Forms.ContextMenuStrip();
         menu.Items.Add("米亞，回來！",null,(_,_)=>Dispatcher.Invoke(Recall));
         menu.Items.Add("對話",null,(_,_)=>Dispatcher.Invoke(ShowChat));

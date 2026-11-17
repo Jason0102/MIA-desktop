@@ -47,7 +47,7 @@ public sealed partial class ChatWindow : Window
 
     public ChatWindow(App app)
     {
-        _app=app; Title="米亞 MIA 3.2 · 直接對話"; Width=380; MinWidth=280; MinHeight=56;
+        _app=app; Title="米亞 MIA 3.3 · 直接對話"; Width=380; MinWidth=280; MinHeight=56;
         SizeToContent=SizeToContent.Height; Ui.Style(this);
         var root=new StackPanel(); Content=root;
         var details=new StackPanel { Margin=new Thickness(14) };
@@ -164,7 +164,7 @@ public sealed partial class ChatWindow : Window
     internal void SetWorkCenter(bool enabled)
     {
         IsWorkCenter = enabled;
-        Title = enabled ? "米亞 MIA 3.2 · 工作中心" : "米亞 MIA 3.2 · 輸入橫幅";
+        Title = enabled ? "米亞 MIA 3.3 · 工作中心" : "米亞 MIA 3.3 · 輸入橫幅";
         _workPanel.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
         _bannerDetails.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         _capsule.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
@@ -232,13 +232,23 @@ public sealed partial class ChatWindow : Window
     internal async Task ClearHermesMemoryAsync()
     {
         if (_clearingConversation) return;
-        var hermes = _app.Hermes ?? throw new InvalidOperationException("請透過米亞 3.2 啟動捷徑連線至 Hermes。");
         if (_jobs.Count > 0 || _dispatches.Any(task => !task.IsCompleted)) throw new InvalidOperationException("請先等待工作結束，或停止工作後再清除。");
         _clearingConversation = true;
         CancelReply();
         try
         {
-            await hermes.ClearMemoryAsync();
+            await _kanbanGate.WaitAsync();
+            _kanbanGate.Release();
+            if (_jobs.Count > 0 || _dispatches.Any(task => !task.IsCompleted))
+                throw new InvalidOperationException("請先等待工作結束，或停止工作後再清除。");
+            async Task ClearExistingMemory()
+            {
+                if (_app.Hermes is { } hermes) await hermes.ClearMemoryAsync();
+                _app.Ai.ClearHistory();
+            }
+
+            if (InteractionMemory.Desktop() is { } memory) await memory.ResetAsync(ClearExistingMemory);
+            else await ClearExistingMemory();
             _knownTasks.Clear();
             SaveTaskContext();
             _taskResults.ClearConversationText();
@@ -248,7 +258,7 @@ public sealed partial class ChatWindow : Window
             _hermesFinalReply = null;
             _hermesToolEvents.Clear();
             RenderActivity();
-            _status.Text = "已清除 Hermes 記憶與對話紀錄。";
+            _status.Text = "已清除記憶、對話與互動紀錄。";
         }
         finally { _clearingConversation = false; }
     }
@@ -287,6 +297,7 @@ public sealed partial class ChatWindow : Window
         var times=string.Join("、",_attachments.Select((a,i)=>$"圖{i+1}：{a.Time:HH:mm:ss}"));
         ClearAttachment();
         var session=new CancellationTokenSource(); _request=session;
+        var interaction = InteractionTurn.Capture(text);
         _input.Clear(); AddMessage("你",text+(images.Length>0?$"\n〔附有 {images.Length} 張畫面 · {times}〕":""),false);
         _status.Text="米亞正在思考…"; _app.Pet.SetMood("thinking");
         var presentation = new ReplyPresentation(this, "米亞", session.Token, SpeechTags.RequestsUrls(text));
@@ -299,8 +310,10 @@ public sealed partial class ChatWindow : Window
                 if (!OwnsRequest(session)) return;
                 streamed.Append(delta);
                 presentation.Update(streamed.ToString());
-            });
+            }, mood: presentation.Mood);
             if (!OwnsRequest(session)) return;
+            interaction?.Classify(InteractionTopics.LooksLikeTask(text) ? "request" : "chat");
+            interaction?.Record("message_result", "completed");
 
             _lastReply = reply.Split("\n來源：")[0];
             await presentation.CompleteAsync(reply, _lastReply);
@@ -312,11 +325,13 @@ public sealed partial class ChatWindow : Window
         }
         catch (OperationCanceledException)
         {
+            interaction?.Interrupted("cancelled");
             if (ReferenceEquals(_request,session) && !_app.IsExiting) _status.Text = "已停止。";
             session.Cancel();
         }
         catch (Exception ex)
         {
+            interaction?.Interrupted("failed");
             if (ReferenceEquals(_request,session)) { _status.Text = Friendly(ex); _app.Pet.SetMood("error"); }
             session.Cancel();
         }

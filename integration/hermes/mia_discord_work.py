@@ -39,7 +39,7 @@ class WorkMirror:
             logging.getLogger(__name__).exception('Unable to mirror Discord work')
 
 
-def install(home):
+def install(home, interactions=None):
     from gateway.platforms.base import BasePlatformAdapter
     mirror = WorkMirror(home)
     original_hook = BasePlatformAdapter._run_processing_hook
@@ -51,8 +51,10 @@ def install(home):
                           StartedAt=datetime.now(timezone.utc).isoformat())
         elif len(args) > 1 and name == 'on_processing_complete':
             outcome = args[1].name.lower()
-            mirror.update(args[0], Status={'success': 'completed', 'failure': 'failed',
-                                          'cancelled': 'cancelled'}.get(outcome, 'failed'))
+            result = {'success': 'completed', 'failure': 'failed', 'cancelled': 'cancelled'}.get(outcome, 'failed')
+            mirror.update(args[0], Status=result)
+            if interactions is not None:
+                interactions.end(args[0], result)
         return await original_hook(adapter, name, *args, **kwargs)
 
     async def extract(adapter, response, event, *args, **kwargs):
@@ -60,7 +62,11 @@ def install(home):
             kinds = re.findall(r'<!--mia-kind:(chat|task)-->', response)
             if kinds:
                 mirror.update(event, Kind=kinds[-1])
+            topics = re.findall(r'<!--mia-chat:([^<>]{0,180})-->', response)
+            if interactions is not None:
+                interactions.classify(event, kinds[-1] if kinds else None, topics[-1].split(',') if topics else [])
             response = re.sub(r'<!--mia-kind:(?:chat|task)-->', '', response).rstrip()
+            response = re.sub(r'<!--mia-chat:[^<>\n]*-->', '', response).rstrip()
         result = await original_extract(adapter, response, event, *args, **kwargs)
         files = [str(p) for p, _ in result.media_files] + [str(p) for p in result.local_files]
         mirror.update(event, Reply=result.text_content or '', Files=list(dict.fromkeys(files)))

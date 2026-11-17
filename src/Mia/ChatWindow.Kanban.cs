@@ -30,7 +30,7 @@ public sealed partial class ChatWindow
 
     private async Task PollKanbanAsync()
     {
-        if (_kanban is not { } board || _app.IsExiting || !await _kanbanGate.WaitAsync(0)) return;
+        if (_kanban is not { } board || _app.IsExiting || _clearingConversation || !await _kanbanGate.WaitAsync(0)) return;
         try
         {
             if (!board.BoardExists)
@@ -44,7 +44,7 @@ public sealed partial class ChatWindow
                 _kanbanRecovered = true;
                 RenderKanban(recovered);
             }
-            if (_app.IsExiting) return;
+            if (_app.IsExiting || _clearingConversation) return;
 
             string action = _kanbanExecution.IsCompleted ? "advance" : "list";
             var state = await board.CallAsync(new { action, owner = board.Owner });

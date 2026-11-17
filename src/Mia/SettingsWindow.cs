@@ -29,12 +29,19 @@ public sealed partial class SettingsWindow : Window
 
     public SettingsWindow(App app)
     {
-        _app=app; Title="米亞 MIA 3.2 · 設定與聲線"; Width=400; Height=480; MinWidth=320; MinHeight=180; Ui.Style(this);
+        _app=app; Title="米亞 MIA 3.3 · 設定與聲線"; Width=400; Height=480; MinWidth=320; MinHeight=180; Ui.Style(this);
         var panel=new StackPanel { Margin=new Thickness(16) }; Content=new ScrollViewer { Content=panel, VerticalScrollBarVisibility=ScrollBarVisibility.Auto };
         panel.Children.Add(Ui.Text("米亞 · 設定",16,Ui.Gold));
         var navigation=new WrapPanel(); panel.Children.Add(navigation);
         navigation.Children.Add(Ui.Button("退出米亞",()=>{FlushAutoSave();app.ExitApp();}));
         navigation.Children.Add(Ui.Button("暫停／繼續",()=>app.Pet.Paused=!app.Pet.Paused));
+        var dashboardLink = new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run("後台資訊")) { Foreground = Ui.Gold };
+        dashboardLink.Click += (_, _) =>
+        {
+            try { app.OpenInteractionDashboard(); }
+            catch (Exception ex) { _status.Text = "無法開啟後台資訊。 " + ChatWindow.Friendly(ex); }
+        };
+        navigation.Children.Add(new TextBlock { Inlines = { dashboardLink }, Margin = new Thickness(4, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
         panel.Children.Add(Ui.Text("變更自動套用 · 右鍵返回對話",13,Ui.Subtle));
         var advanced=new StackPanel { Margin=new Thickness(0,12,0,0) };
         advanced.Children.Add(Ui.Text("OpenAI API Key · gpt-6.1-sol")); StylePassword(_open); _open.Password=app.Settings.OpenAiKey; advanced.Children.Add(_open);
@@ -130,7 +137,7 @@ public sealed partial class SettingsWindow : Window
         section.Children.Add(Ui.Text("代理與權限", 16, Ui.Gold));
 
         section.Children.Add(Ui.Text("Hermes 主代理"));
-        var connection = Ui.Text(_app.Hermes is null ? _app.HermesConfigurationError ?? "未啟用。請從米亞 3.2 啟動捷徑開啟。" : "已設定本機 API。", 12, Ui.Subtle);
+        var connection = Ui.Text(_app.Hermes is null ? _app.HermesConfigurationError ?? "未啟用。請從米亞啟動捷徑開啟。" : "已設定本機 API。", 12, Ui.Subtle);
         section.Children.Add(connection);
         section.Children.Add(Ui.Text("Codex 執行助手"));
         section.Children.Add(Ui.Text(File.Exists(codex) ? $"已找到執行程式\n{codex}" : "未找到執行程式。", 12, Ui.Subtle));
@@ -160,9 +167,8 @@ public sealed partial class SettingsWindow : Window
             }));
 
         var feedback = Ui.Text("", 12, Ui.Subtle);
-        var clear = Ui.Button("清除 Hermes 的記憶", () => { });
+        var clear = Ui.Button("重置米亞記憶", () => { });
         clear.Click += (_, _) => _ = ClearAsync();
-        clear.IsEnabled = _app.Hermes is not null;
         clear.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(166, 38, 48));
         clear.Foreground = System.Windows.Media.Brushes.White;
         section.Children.Add(clear);
@@ -184,11 +190,18 @@ public sealed partial class SettingsWindow : Window
 
         async Task ClearAsync()
         {
-            if (MessageBox.Show(this, "將永久清除 PC 對話紀錄，以及此使用者在 PC 與 Discord 共用的長期記憶和偏好。確定要清除嗎？",
-                "清除 Hermes 的記憶", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+            string scope = _app.Hermes is not null
+                ? "將永久清除此使用者的對話、長期及互動記憶，包括 PC 與 Discord 的共用偏好。米亞的心情會回到初始狀態。"
+                : "將永久清除本機對話與互動記憶。若有先前的 Hermes 記憶，請連接 Hermes 後再次重置。";
+            if (MessageBox.Show(this, scope + "確定要重置嗎？",
+                "重置米亞記憶", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
             clear.IsEnabled = false;
-            feedback.Text = "正在清除 Hermes 的記憶…";
-            try { await _app.ClearHermesMemoryAsync(); feedback.Text = "已清除 Hermes 的記憶與對話紀錄。"; }
+            feedback.Text = "正在重置米亞記憶…";
+            try
+            {
+                await _app.ClearHermesMemoryAsync();
+                feedback.Text = _app.Hermes is not null ? "已重置米亞的對話、長期與互動記憶。" : "已重置本機對話與互動記憶。";
+            }
             catch (Exception ex) { feedback.Text = "清除未完成。 " + ChatWindow.Friendly(ex); }
             finally { clear.IsEnabled = true; }
         }
@@ -290,7 +303,7 @@ internal static class StartupRegistration
         {
             string? launcher=Environment.GetEnvironmentVariable("MIA_START_LAUNCHER");
             if(string.IsNullOrWhiteSpace(launcher) || !Path.IsPathFullyQualified(launcher) || !File.Exists(launcher))
-                throw new InvalidOperationException("請使用 3.2 的啟動捷徑，再啟用登入時自動啟動。");
+                throw new InvalidOperationException("請使用米亞的啟動捷徑，再啟用登入時自動啟動。");
             string powershell=Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe");
             command=$"\"{powershell}\" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{launcher}\"";
         }

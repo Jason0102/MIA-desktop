@@ -74,7 +74,7 @@ public sealed record SpeechAnimation(string Tag, string Gesture, double Period, 
 
     public static SpeechAnimation Resolve(string text)
     {
-        var matches = Regex.Matches(text, @"\[(?:audio:\s*)?([^\[\]\r\n]+)\]", RegexOptions.IgnoreCase);
+        var matches = Regex.Matches(Services.SpeechTags.WithoutDelivery(text), @"\[(?:audio:\s*)?([^\[\]\r\n]+)\]", RegexOptions.IgnoreCase);
         SpeechAnimation result = Default;
         foreach (Match match in matches)
         {
@@ -84,7 +84,7 @@ public sealed record SpeechAnimation(string Tag, string Gesture, double Period, 
                 .Concat(Aliases.Select(a => (Name: a.Key, Profile: All.First(p => p.Tag == a.Value))));
             var found = candidates.Where(c => Regex.IsMatch(cue, @"\b" + Regex.Escape(c.Name) + @"\b"))
                 .OrderBy(c => All.ToList().IndexOf(c.Profile)).FirstOrDefault();
-            result = found.Profile ?? Default;
+            if (found.Profile is not null) result = found.Profile;
         }
         return result;
     }

@@ -30,7 +30,9 @@ def install():
 
     GatewayNotificationsMixin._deliver_platform_notice = notice
     from mia_discord_work import install as install_work_mirror
-    mirror = install_work_mirror(get_process_hermes_home())
+    from mia_discord_interactions import DiscordInteractions
+    interactions = DiscordInteractions(get_process_hermes_home())
+    mirror = install_work_mirror(get_process_hermes_home(), interactions)
     from gateway.session_recovery import SessionRecoveryMixin
     original_find = SessionRecoveryMixin._find_gateway_session_row
 
@@ -84,9 +86,17 @@ def install():
             db.execute('INSERT OR IGNORE INTO routes VALUES (?,?,?,?)',
                        (source.chat_id, source.user_id, event.message_id, task))
         source.chat_id_alt = task
-        if not row:
-            mirror.update(event, Status='queued')
-        return await original_handle(adapter, event)
+        command = bool(event.get_command())
+        if not interactions.begin(event, task, bool(reply), command):
+            await adapter.send(source.chat_id, '目前無法接收此訊息，請稍後再試。', reply_to=event.message_id)
+            return
+        try:
+            if not row:
+                mirror.update(event, Status='queued')
+            return await original_handle(adapter, event)
+        finally:
+            if not getattr(event, '_gateway_accepted', False):
+                interactions.end(event, None if command else 'cancelled', command=command)
 
     def enqueue(adapter, event):
         if event.source.platform.value == 'discord' and event.source.chat_type == 'dm':

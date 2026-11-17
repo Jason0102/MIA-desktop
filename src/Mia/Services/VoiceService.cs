@@ -66,16 +66,17 @@ public sealed class VoiceService : IDisposable
                 {
                     session.Token.ThrowIfCancellationRequested();
                     if (_settings.Muted) break;
-                    if (!SpeechTags.HasWords(SpeechTags.SpokenText(chunk, readUrls)))
+                    if (!HasSpokenWords(chunk, readUrls))
                     {
                         segmentStarted?.Invoke(chunk);
                         continue;
                     }
-                    await StreamSentenceAsync(SpeechTags.SpokenText(chunk, readUrls), session.Token, () => segmentStarted?.Invoke(chunk));
+                    await StreamSentenceAsync(SpeechTags.SpokenText(chunk, readUrls), SpeechAnimation.Resolve(chunk),
+                        session.Token, () => segmentStarted?.Invoke(chunk));
                 }
                 return;
             }
-            chunks = chunks.Where(chunk => SpeechTags.HasWords(SpeechTags.SpokenText(chunk, readUrls))).ToArray();
+            chunks = chunks.Where(chunk => HasSpokenWords(chunk, readUrls)).ToArray();
             Task<string>? pending = null;
             try
             {
@@ -90,7 +91,7 @@ public sealed class VoiceService : IDisposable
                         if(_settings.Muted)break;
                         // At most one upcoming sentence is generated while the current one plays.
                         if(i+1<chunks.Length)pending=GenerateFileAsync(SpeechTags.SpokenText(chunks[i+1], readUrls),session.Token);
-                        _playbackAnimation = SpeechAnimation.Resolve(SpeechTags.SpokenText(chunks[i], readUrls));
+                        _playbackAnimation = SpeechAnimation.Resolve(chunks[i]);
                         // The injected file player follows the same start/end contract as PCM playback.
                         SpeechAnimationChanged?.Invoke(_playbackAnimation);
                         IsSpeaking = true;
@@ -137,7 +138,10 @@ public sealed class VoiceService : IDisposable
             await SpeakAsync(sentence, ct, segmentStarted, readUrls);
     }
 
-    private async Task StreamSentenceAsync(string text, CancellationToken ct, Action started)
+    private static bool HasSpokenWords(string text, bool readUrls) =>
+        SpeechTags.HasWords(SpeechTags.SpokenText(SpeechTags.Display(text), readUrls));
+
+    private async Task StreamSentenceAsync(string text, SpeechAnimation animation, CancellationToken ct, Action started)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post,
             "https://api.elevenlabs.io/v1/text-to-dialogue/stream?output_format=pcm_24000");
@@ -153,7 +157,7 @@ public sealed class VoiceService : IDisposable
             await PcmStreamPlayer.PlayAsync(stream, () => OnDispatcherAsync(() =>
             {
                 if (ct.IsCancellationRequested) return;
-                SpeechAnimationChanged?.Invoke(SpeechAnimation.Resolve(text));
+                SpeechAnimationChanged?.Invoke(animation);
                 IsSpeaking = true;
                 SpeakingChanged?.Invoke(true);
                 started();
@@ -185,7 +189,7 @@ public sealed class VoiceService : IDisposable
     {
         RequireVoice();
         string spoken = SpeechTags.SpokenText(text.Trim(), readUrls: true);
-        if (spoken.Length > 5000 || !SpeechTags.HasWords(spoken))
+        if (spoken.Length > 5000 || !HasSpokenWords(text, readUrls: true))
             throw new ArgumentException("請提供 1 至 5000 字的語音稿。");
         string temporary = await GenerateFileAsync(spoken, ct);
         try { File.Move(temporary, destination); }

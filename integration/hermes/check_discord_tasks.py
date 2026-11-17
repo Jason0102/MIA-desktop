@@ -24,6 +24,7 @@ async def check():
 
     async def handle(adapter, event):
         from gateway.session import build_session_key
+        event._gateway_accepted = True
         entered.append((event, build_session_key(event.source, profile=event.source.profile)))
         await release.wait()
 
@@ -44,8 +45,11 @@ async def check():
         pin_process_hermes_home(Path(folder) / 'hermes')
         state = Path(folder) / 'mia'
         state.mkdir()
-        (state / 'users.json').write_text(json.dumps({'Bindings': [
-            {'Provider': 'discord', 'Subject': '123456789012345678', 'UserId': 'jason'}]}))
+        os.environ['MIA_DATA_DIR'] = str(state)
+        os.environ['MIA_HERMES_USER_REGISTRY'] = str(state / 'users.json')
+        (state / 'users.json').write_text(json.dumps({'Users': [{'Id': 'jason'}, {'Id': 'other'}], 'Bindings': [
+            {'Provider': 'discord', 'Subject': '123456789012345678', 'UserId': 'jason'},
+            {'Provider': 'discord', 'Subject': '234567890123456789', 'UserId': 'other'}]}))
         install()
         notices = []
         async def send(*args, **kwargs):
@@ -73,7 +77,8 @@ async def check():
         assert all(json.loads(p.read_text())['Status'] == 'queued' for p in snapshots)
         release.set()
         await asyncio.gather(*jobs)
-        await BasePlatformAdapter.handle_message(adapter, event('333', reply='111'))
+        resumed = event('333', reply='111')
+        await BasePlatformAdapter.handle_message(adapter, resumed)
         assert entered[-1][1] == entered[0][1]
         await BasePlatformAdapter.handle_message(adapter, event('444', reply='111', user='234567890123456789'))
         assert len(entered) == 3 and len(notices) == 1
@@ -93,7 +98,7 @@ async def check():
             db.close()
         assert os.environ['HERMES_GATEWAY_BUSY_ACK_ENABLED'] == 'false'
         await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_start', first)
-        await BasePlatformAdapter._extract_response_content(adapter, 'Done<!--mia-kind:task-->', first, entered[0][1])
+        await BasePlatformAdapter._extract_response_content(adapter, 'Done<!--mia-kind:task--><!--mia-chat:音樂,should-not-persist-->', first, entered[0][1])
         assert extracted_inputs[-1] == 'Done', 'Internal classification must not reach Discord'
         await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_complete', first, ProcessingOutcome.SUCCESS)
         snapshots = [json.loads(p.read_text()) for p in (state / 'discord-work').glob('*.json')]
@@ -105,8 +110,19 @@ async def check():
         await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_complete', second, ProcessingOutcome.FAILURE)
         snapshots = [json.loads(p.read_text()) for p in (state / 'discord-work').glob('*.json')]
         assert next(s for s in snapshots if s['Task'] == 'mia-task-222')['Status'] == 'failed'
+        await BasePlatformAdapter._extract_response_content(adapter, 'Done<!--mia-kind:task-->', resumed, entered[-1][1])
+        await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_complete', resumed, ProcessingOutcome.CANCELLED)
+        from mia_interaction import InteractionMemory
+        events = InteractionMemory(state, 'jason').read()
+        assert sum(item['Kind'] == 'message' for item in events) == 3
+        assert sum(item['Kind'] == 'task_new' for item in events) == 1
+        assert [item['Group'] for item in events if item['Kind'] == 'task_resume'] == ['mia-task-111']
+        assert [item['Topics'] for item in events if item['Kind'] == 'chat' and item.get('TopicConfidence') == 'classified'] == [['音樂']]
+        assert not InteractionMemory(state, 'other').read()
+        assert not list((InteractionMemory(state, 'jason').root / InteractionMemory(state, 'jason').generation()).glob('active-*'))
         print('PASS: concurrent DM jobs, reply continuation, user isolation, durable source round-trip, quiet acknowledgements.')
         print('PASS: durable work-center snapshots, identity, lifecycle, results and attachments.')
+        print('PASS: mixed Discord interactions, task continuation and exclusion of unbound topic labels.')
 
 
 asyncio.run(check())

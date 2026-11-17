@@ -1,4 +1,4 @@
-﻿# MIA 3.2 的 Hermes 與 Codex 整合
+# MIA 的 Hermes 與 Codex 整合
 
 MIA 維持桌面角色、對話與語音，透過只聽本機的 Hermes API 提交任務。Hermes 管理會話並選擇工具。`mia_codex_run` 交給本機 Codex CLI 執行工作，Hermes 再把文字與產物資訊回傳給米亞。
 
@@ -20,7 +20,7 @@ MIA 維持桌面角色、對話與語音，透過只聽本機的 Hermes API 提�
 ./Start-Mia.ps1 -OpenAiKeyFile 'C:\path\to\api_key' -Model 'your-openai-model'
 ```
 
-金鑰會以 Windows DPAPI 儲存在「文件／MIA Workspace／state」，綁定目前使用者。請選擇自己的帳號可用且支援工具的模型。完成首次設定後，可使用 `啟動米亞.vbs` 或直接執行 `Start-Mia.ps1`。米亞結束時，啟動器會關閉這次啟動的 Gateway。`.mia-runtime` 提供 Hermes、Python 與 Codex 執行依賴，桌寵建置成品在 `dist/MIA-3.2-win-x64`。在另一台電腦請重新安裝及登入。
+金鑰會以 Windows DPAPI 儲存在「文件／MIA Workspace／state」，綁定目前使用者。請選擇自己的帳號可用且支援工具的模型。完成首次設定後，可使用 `啟動米亞.vbs` 或直接執行 `Start-Mia.ps1`。米亞結束時，啟動器會關閉這次啟動的 Gateway。`.mia-runtime` 提供 Hermes、Python 與 Codex 執行依賴，桌寵建置成品在 `dist/MIA-3.3-win-x64`。在另一台電腦請重新安裝及登入。
 
 ## 使用方式
 
@@ -31,7 +31,7 @@ MIA 維持桌面角色、對話與語音，透過只聽本機的 Hermes API 提�
 - 右鍵點人物依序切換輸入橫幅、工作中心、收起。主對話持續承接上下文，由 Hermes 判斷閒聊、新任務或既有任務的補充。新任務可並行執行，補充優先送入原任務，暫時無法接收時等待目前步驟結束後接續原會話。最近 50 項任務索引存於工作目錄，可供主對話辨認已完成成果。工作中心與輸入橫幅同寬，只顯示進行中的任務、狀態、個別停止與必要的回覆控制。成果附上任務標題，語音依序播放。
 - 主對話從 Hermes 串流抽取 `message`，不顯示分派 JSON。啟用語音時逐句生成，音訊開始播放才逐步顯示該句文字；關閉語音時直接顯示收到的文字，不呼叫 ElevenLabs。任務完成通知立即發出，成果文字共用相同播放流程；語音失敗或停止仍保留完整文字。
 - 每句回應的 `[audio: 情緒]` 同時驅動語音與 EMO 動畫，標籤不顯示在聊天文字中。沒有可辨識標籤時使用 EMO-028（peaceful）。陪伴模式下，有執行中的任務便持續播放 ACT-008（thinking），EMO 說話動畫優先，說完後若仍有任務則恢復 ACT-008。動畫狀態不受原本 120 秒心情期限影響。
-- `state/hermes` 儲存米亞專用的 Hermes 會話與內建記憶，`state/mia` 儲存桌寵設定及聊天顯示副本，`state/codex` 儲存米亞啟動的 Codex 狀態。舊版米亞退出後，第一次啟動會移轉既有資料。設定頁的「清除 Hermes 的記憶」須再次確認，會清除米亞的 Hermes 對話、內建記憶及顯示副本，保留工作成果。
+- `state/hermes` 儲存米亞專用的 Hermes 會話，`state/mia` 儲存桌寵設定、聊天顯示副本與依身分保存的記憶，`state/codex` 儲存米亞啟動的 Codex 狀態。設定頁的「重置米亞記憶」須再次確認。連接 Hermes 時，重置會清除該使用者的本機和綁定 Discord 對話、共用記憶及互動資料，並保留已交付的成果檔案。若有工作進行中，請先完成或停止工作。
 - 啟動會在 Windows「文件」下建立 `MIA Workspace`。工作副本與產物放在 `jobs/<任務識別>/`，啟動器將任務的暫存路徑指向 `temp/`。可把待處理檔案放入 `input/` 或直接指定 Windows 帳號有權讀取的 C 槽絕對路徑。對話橫幅可拖入任意格式的 C 槽檔案，單次最多 16 份；32 MiB 以內優先複製到該次工作資料夾，超過副本預算的檔案以已授權的 C 槽原始路徑供任務讀取。新增程式與測試仍留在工作資料夾，任務相關文件可依要求在 C 槽原位讀寫。
 - 在米亞說「請使用 `mia_install_extension` 安裝內附診斷擴充」即可請 Hermes 自動安裝已隨專案提供的無依賴範例，並檢查註冊結果。第三方插件可在此 Hermes profile 使用其原生安裝功能，並依來源及套件需求確認授權、登入或重新載入。
 - MIA 停用通用命令工具；桌面操作透過 `mia_computer_use` 接入，PowerPoint 驗證透過 `mia_powerpoint_check` 在主機執行。`mia_list_directory` 與 `mia_codex_run` 的來源路徑檢查會拒絕 D 槽、其他磁碟與重新導向的路徑。Codex CLI 保留 Windows 工作區沙箱，以 `--add-dir C:/` 開放 C 槽任務檔案讀寫；Windows 系統本身的 ACL 仍有效。C 槽限制適用於米亞的資料工具，現有 Windows 沙箱無法保證 Codex 子程序也有整顆 D 槽的讀取隔離。
@@ -87,7 +87,7 @@ Discord 連線準備工具已接入啟動器，實際啟用須有 Bot Token 與�
 
 PC 和 Discord 共用同一個 Hermes Gateway 與代理人執行架構。PC 直接與人物互動。Discord 使用同一份 `role.json`，以文字訊息回傳最終結果與附件。Discord 關閉工具進度、中間訊息與自動語音。
 
-每個 Discord 帳號使用 `state/hermes/profiles/mia-discord-<UserID>` 保存對話與技能，`identity.json` 記錄 MIA 使用者與管道。PC 對話與技能保存在 `state/hermes`。長期記憶依綁定的 MIA 使用者保存，讓同一人跨 PC 與 Discord 共用，並以 `[PC]`、`[Discord]` 保留來源。啟動時將既有 Hermes 記憶匯入一次。從 PC 清除記憶會清除這位使用者的共用長期記憶與 PC 對話。僅登錄的帳號可使用 Bot。
+每個 Discord 帳號使用 `state/hermes/profiles/mia-discord-<UserID>` 保存對話與技能，`identity.json` 記錄 MIA 使用者與管道。PC 對話與技能保存在 `state/hermes`。同一使用者的長期記憶及互動資料可跨 PC 與 Discord 共用，並保留來源。啟動時將既有 Hermes 記憶匯入一次。僅登錄的帳號可使用 Bot。
 
 可以私訊米亞「用這個 YouTube 連結的字幕整理摘要，做成 PDF 和 Word 傳給我」。公開字幕可用時會直接讀取，摘要會標示來源及字幕類型。遇到無字幕或影片限制存取時，可以上傳字幕檔供整理。文件支援 PDF、DOCX、TXT 和 Markdown，並以 Discord 附件交付。現有安裝若缺套件，先執行 `Install-Hermes.ps1` 再以原捷徑啟動。
 

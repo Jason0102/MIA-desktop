@@ -32,6 +32,8 @@ public sealed partial class ChatWindow
         private readonly bool audio;
         private readonly bool readUrls;
         private readonly VoiceService voice;
+        private readonly InteractionMemory? memory;
+        private int spokenSegments;
         private IReadOnlyList<TaskResult>? results;
         private readonly Task playback;
         private readonly StringBuilder pending = new();
@@ -45,14 +47,17 @@ public sealed partial class ChatWindow
 
         internal string VisibleText => body?.Text ?? "";
         internal string? VoiceError { get; private set; }
+        internal MoodSnapshot Mood { get; }
         internal ReplyPresentation(ChatWindow owner, string who, CancellationToken ct, bool readUrls = false,
-            VoiceService? voice = null, IReadOnlyList<TaskResult>? results = null)
+            VoiceService? voice = null, IReadOnlyList<TaskResult>? results = null, MoodSnapshot? mood = null)
         {
             this.owner = owner; this.who = who; this.ct = ct;
             speechGeneration = owner._speechInterruption.Token;
             this.readUrls = readUrls;
             this.voice = voice ?? owner._app.Voice;
             this.results = results;
+            memory = InteractionMemory.Desktop();
+            Mood = mood ?? InteractionMood.FromMemory(memory);
             audio = !owner._app.Settings.Muted;
             playback = audio ? PlayAsync() : Task.CompletedTask;
         }
@@ -102,6 +107,7 @@ public sealed partial class ChatWindow
             try
             {
                 await playback;
+                ct.ThrowIfCancellationRequested();
                 if (!owner._app.IsExiting)
                 {
                     // Poll recovery, speech cancellation and service failures must never lose the result.
@@ -113,6 +119,12 @@ public sealed partial class ChatWindow
                         body.Parent is StackPanel panel)
                         panel.Children.Add(Ui.Text(note, 12, Ui.Subtle));
                     owner._scroll.ScrollToEnd();
+                    if (!ct.IsCancellationRequested)
+                    {
+                        int index = spokenSegments;
+                        foreach (string part in VoiceService.ChunkText(text).SelectMany(SpeechTags.Segments).Skip(index))
+                            Trace(part, "text", index++);
+                    }
                 }
                 if (!speechGeneration.IsCancellationRequested && textAnimationStarted is long start)
                 {
@@ -184,6 +196,7 @@ public sealed partial class ChatWindow
                                 segment =>
                                 {
                                     audioStarted |= voice.IsSpeaking;
+                                    if (voice.IsSpeaking) Trace(segment, "audio", spokenSegments++);
                                     reveal = RevealAfterAsync(reveal, segment, audioToken);
                                 }, readUrls);
                         }
@@ -199,6 +212,20 @@ public sealed partial class ChatWindow
                 VoiceError = "語音未完成，已顯示文字。" + Friendly(ex);
                 if (!owner._app.IsExiting) { ShowDirect(); owner._status.Text = VoiceError; }
             }
+        }
+
+        private void Trace(string segment, string mode, int index)
+        {
+            if (memory is null || string.IsNullOrEmpty(Mood.MemoryGeneration)) return;
+            string tag = SpeechAnimation.Resolve(segment).Tag;
+            if (tag.Length == 0) tag = "peaceful";
+            var delivery = SpeechTags.DeliveryDirections(segment);
+            string voiceCues = delivery.Count == 0 ? "無" : string.Join('、', delivery);
+            string group = id.ToString("N");
+            string presentation = mode == "audio" ? "開始播放" : "以文字呈現";
+            string detail = $"第 {index + 1} 段 · {presentation} · 情緒／動畫 {tag} · 語音指示 {voiceCues} · 心情 {Mood.State}（{string.Join('、', Mood.Reasons)}）";
+            memory.Record(new InteractionEvent($"expression-{group}-{index}", DateTimeOffset.UtcNow, "PC", "expression",
+                Group: group, Status: mode, Detail: detail), Mood.MemoryGeneration);
         }
 
         private async Task RevealAfterAsync(Task previous, string segment, CancellationToken audioToken)
@@ -241,6 +268,8 @@ public sealed partial class ChatWindow
         return TimeSpan.FromSeconds(Math.Max(1.2, seconds));
     }
 
-    private Task PresentReplyAsync(string who, string text, CancellationToken ct, bool readUrls = false, TaskResult? result = null)
-        => new ReplyPresentation(this, who, ct, readUrls, results: result is { Files.Length: > 0 } ? [result] : null).CompleteAsync(text);
+    private Task PresentReplyAsync(string who, string text, CancellationToken ct, bool readUrls = false,
+        TaskResult? result = null, MoodSnapshot? mood = null)
+        => new ReplyPresentation(this, who, ct, readUrls, results: result is { Files.Length: > 0 } ? [result] : null,
+            mood: mood).CompleteAsync(text);
 }

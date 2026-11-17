@@ -12,15 +12,31 @@ public static class SpeechTags
         語音表演格式：用 [audio: 英文指示] 標記需要改變表演的地方。程式會轉成 ElevenLabs 的 [英文指示]。
         可用 Eleven v4 支援的任何標籤，包括自訂的簡短英文描述與組合，例如 [audio: whispering, playful]。以下是選擇條件與例子，不是限制清單。
         情緒取決於米亞此刻的反應：分享好消息用 happy 或 excited，慶祝成就用 proud，開玩笑用 playful，驚喜用 amazed 或 startled，真心追問用 curious，斟酌回答用 thoughtful，安心陪伴用 peaceful，感同身受用 sad 或 sympathetic。疲憊、失落、困惑、緊張、恐懼或憤怒等語氣用於上下文確實呈現這些情緒時；避免對求助者嘲諷或發怒。
-        音量與表達方式依場景調整：安慰用 softly，說悄悄話用 whispers，需要呼喊才用 shouts；角色或口音僅在使用者要求或角色演出需要時使用。節奏依台詞選擇：認真說明可放慢，興奮時可加快，戲劇轉折或思考時才加 pause 或 long pause。
+        用獨立的 [delivery: 英文指示] 標記語速、停頓與說話力度。可用 slowly（慢）、rushed（急促）、pause（停頓）、long pause（較長停頓）、softly（柔聲）、whispers（耳語）、shouts（呼喊）。每類只選一個，無須每句都加。語速與力度放在句首情緒標籤後；停頓放在應停頓的位置。依心情與當下情境選擇，音訊標籤的效果隨聲線與上下文而異。
         人物反應須符合當下動作：真覺得好笑用 laughs，鬆一口氣或無奈用 sighs，突遇意外用 gasps；清喉嚨、哭泣等反應只在場景需要時使用。音效只在使用者要求或明確的故事演出需要時使用。
-        情緒標籤同時驅動語音與角色動畫，關閉語音時仍須提供。每句對使用者說的台詞都必須在句首明確標記情緒，不能只靠文字或標點暗示。平實解說使用 thoughtful 或 peaceful。自由描述或複合指示請包含最貼近的情緒英文詞，例如 [audio: sad, softly] 或 [audio: excited, speaking quickly]，讓角色能辨識表情。標籤放在受影響的台詞前，語氣轉變時可在句中加入；語音逐句生成，跨句仍需維持相同語氣時在新句開頭重加。避免堆疊互相衝突的指示。程式碼、工具參數、路徑與來源不加標籤；JSON 回應僅在給使用者的 message 字串內加標籤。
-        例：[audio: proud]你真的做到了！[audio: curious]哪一步最有成就感？
+        情緒標籤同時驅動語音與角色動畫，關閉語音時仍須提供。每句台詞在句首標記情緒，平實解說使用 thoughtful 或 peaceful。語氣轉變時可在句中加入情緒標籤。語音逐句生成，跨句要維持相同語氣時在新句開頭重加。避免堆疊互相衝突的指示。程式碼、工具參數、路徑與來源不加標籤。JSON 回應只在給使用者的 message 字串內加標籤。
+        例：[audio: proud]你真的做到了！[audio: thoughtful][delivery: slowly, softly]我們先回顧一下，[delivery: pause]哪一步最有成就感？
         """;
     private static readonly string[] Names = { "happy", "excited", "sad", "curious", "whispers", "laughs", "sighs", "angry" };
     private const string Prefix = "audio:";
+    private const string DeliveryPrefix = "delivery:";
     private static readonly Regex AudioTag = new(@"\[audio:[ \t]*(?<cue>[^\[\]\r\n]+)\]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex DeliveryTag = new(@"\[delivery:[ \t]*(?<cue>[^\[\]\r\n]*)\]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex Tags = new(@"\[(?:audio:[^\[\]\r\n]*|happy|excited|sad|curious|whispers|laughs|sighs|angry)\][ \t]*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly string[][] DeliveryCues = [["slowly", "rushed"], ["pause", "long pause"], ["softly", "whispers", "shouts"]];
+
+    private static IEnumerable<string> Directions(Match match)
+    {
+        var requested = match.Groups["cue"].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        foreach (string[] allowed in DeliveryCues)
+            if (requested.FirstOrDefault(cue => allowed.Contains(cue, StringComparer.OrdinalIgnoreCase)) is { } direction)
+                yield return direction.ToLowerInvariant();
+    }
+
+    public static IReadOnlyList<string> DeliveryDirections(string text) => DeliveryTag.Matches(text)
+        .SelectMany(Directions).Distinct(StringComparer.Ordinal).ToArray();
+
+    internal static string WithoutDelivery(string text) => DeliveryTag.Replace(text, "");
 
     public static bool RequestsUrls(string request)
     {
@@ -44,7 +60,9 @@ public static class SpeechTags
         text = Regex.Replace(text, @"<[^>]+>|【[^】]*】", "");
         return ForElevenLabs(text.Trim());
     }
-    public static string ForElevenLabs(string text) => AudioTag.Replace(text, match => "[" + match.Groups["cue"].Value.Trim() + "]");
+    public static string ForElevenLabs(string text) => DeliveryTag.Replace(
+        AudioTag.Replace(text, match => "[" + match.Groups["cue"].Value.Trim() + "]"),
+        match => string.Concat(Directions(match).Select(cue => "[" + cue + "]")));
 
     public static IEnumerable<string> Segments(string text)
     {
@@ -70,11 +88,13 @@ public static class SpeechTags
                 string tail = text[(start + 1)..];
                 if (!tail.Contains(']') && (Prefix.StartsWith(tail, StringComparison.OrdinalIgnoreCase)
                     || tail.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase)
+                    || DeliveryPrefix.StartsWith(tail, StringComparison.OrdinalIgnoreCase)
+                    || tail.StartsWith(DeliveryPrefix, StringComparison.OrdinalIgnoreCase)
                     || Names.Any(n => n.StartsWith(tail, StringComparison.OrdinalIgnoreCase))))
                     text = text[..start]; // A tag may span several SSE events.
             }
         }
-        return Tags.Replace(text, "");
+        return Tags.Replace(WithoutDelivery(text), "");
     }
 
     public static bool HasWords(string text) => !string.IsNullOrWhiteSpace(Display(text));

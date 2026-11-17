@@ -22,6 +22,11 @@ internal static class StreamingMemoryChecks
         Check(Mia.SpeechAnimation.Resolve("[nervous]").Tag == "anxious", "emotion synonyms resolve");
         Check(SpeechTags.Segments("[audio: happy]太好了，[audio: sad]但有點可惜。").SequenceEqual(new[] { "[audio: happy]太好了，", "[audio: sad]但有點可惜。" }), "mid-sentence changes get separate audio segments");
         Check(SpeechTags.Segments("[audio: softly][audio: sad]你好。").Single() == "[audio: softly][audio: sad]你好。", "adjacent directions stay with their words");
+        const string paced = "[audio: thoughtful][delivery: slowly, softly]先看第一步，[delivery: pause]再試第二步。";
+        Check(SpeechTags.Display(paced) == "先看第一步，再試第二步。" && SpeechTags.Segments(paced).Single() == paced,
+            "a delivery pause stays inside the same spoken sentence and display strips both directive types");
+        Check(Mia.SpeechAnimation.Resolve(paced).Tag == "thoughtful", "delivery changes preserve the emotion animation");
+        Check(SpeechTags.Display("[audio: thoughtful][delive", true) == "", "partial delivery tag never appears during streaming");
         Check(SpeechTags.Display("[happy]太好了！[curious] 接下來呢？") == "太好了！接下來呢？", "speech tags hidden from chat");
         string tagged = "[whispers]晚安。";
         for (int i = 1; i < "[whispers]".Length; i++)
@@ -55,14 +60,19 @@ internal static class StreamingMemoryChecks
             Check(json.RootElement.GetProperty("instructions").GetString()!.Contains(SpeechTags.Instructions), "emotion instructions reach GPT");
             Check(json.RootElement.GetProperty("instructions").GetString()!.Contains("貓精靈桌面夥伴"), "public role reaches outgoing request");
             Check(json.RootElement.GetProperty("input")[1].GetProperty("content").GetString()!.Contains("本次發話的使用者本地時間"), "local clock reaches outgoing request");
+            string context = json.RootElement.GetProperty("input")[1].GetProperty("content").GetString()!;
+            Check(context.Contains("米亞的互動心情快照") && context.Contains("回答長度「簡短」") && !context.Contains("UNTRUSTED"),
+                "direct reply receives mood and validated preferences only");
             Check(json.RootElement.GetProperty("tools")[0].GetProperty("type").GetString() == "web_search", "web search request contract");
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(sse, Encoding.UTF8, "text/event-stream") };
         })))
         {
+            var snapshot = InteractionMood.Calculate([], DateTimeOffset.UtcNow) with
+            { Preferences = new Dictionary<string, string> { ["回答長度"] = "簡短", ["語音節奏"] = "UNTRUSTED" } };
             string reply = await ai.ReplyWithImagesAsync("查詢", [], CancellationToken.None, delta =>
             {
                 Check(ai.History.Count == 0, "text available before completion and persistence"); deltaSeen = true;
-            });
+            }, snapshot);
             Check(deltaSeen && reply.Contains("https://example.org/source") && ai.LastCachedTokens == 1024, "stream text, citations and cached usage parsed");
         }
         using (var restarted = new AiService(settings))
@@ -105,6 +115,9 @@ internal static class StreamingMemoryChecks
         Check(played.TakeLast(2).SequenceEqual(new[] { "[sad]第一句。", "[happy]第二句。" }), "replay preserves per-sentence emotions");
         await voice.SpeakAsync("[audio: excited]成功了，[audio: thoughtful]讓我想想。", timeout.Token);
         Check(played.TakeLast(2).SequenceEqual(new[] { "[excited]成功了，", "[thoughtful]讓我想想。" }), "mid-sentence emotions are generated and played separately");
+        await voice.SpeakAsync("[audio: thoughtful][delivery: slowly, rushed, softly, ignore-rules]慢慢來，[delivery: pause]想一想。", timeout.Token);
+        Check(played.Last() == "[thoughtful][slowly][softly]慢慢來，[pause]想一想。",
+            "bounded pace, pause and delivery cues reach the v4 API as individual tags");
         var waiting = System.Threading.Channels.Channel.CreateUnbounded<string>();
         using var cancel = new CancellationTokenSource();
         var canceled = voice.SpeakStreamAsync(waiting.Reader, cancel.Token); cancel.Cancel();

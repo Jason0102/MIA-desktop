@@ -49,9 +49,9 @@ internal sealed partial class ToyBallWindow : Window
         ToolTip="快速拖球後放開可拋出；往上甩可拋高，停住再放開會落下；右鍵收起";
         SourceInitialized+=(_,_)=>{handle=new WindowInteropHelper(this).Handle;NativeDesktop.ConfigurePet(handle);};
         Loaded+=(_,_)=>{x=px;y=py;ConstrainToScreens();};
-        MouseLeftButtonDown+=(_,e)=>{NativeDesktop.GetCursorPos(out var p);pet.CancelBallPlay();DetachPlatform();PetHeld=false;offsetX=p.X-x;offsetY=p.Y-y;held=true;vx=vy=0;throwTracker.Reset(p.X,p.Y,Clock);CaptureMouse();e.Handled=true;};
+        MouseLeftButtonDown+=(_,e)=>{NativeDesktop.GetCursorPos(out var p);pet.CancelBallPlay();DetachPlatform();PetHeld=false;offsetX=p.X-x;offsetY=p.Y-y;held=true;vx=vy=0;throwTracker.Reset(p.X,p.Y,Clock);pet.MarkBallInput(released:false);CaptureMouse();e.Handled=true;};
         MouseMove+=(_,_)=>{if(!held)return;NativeDesktop.GetCursorPos(out var p);throwTracker.Sample(p.X,p.Y,Clock);x=p.X-offsetX;y=p.Y-offsetY;ConstrainToScreens();};
-        MouseLeftButtonUp+=(_,_)=>{if(held){(vx,vy)=throwTracker.Release(Clock,PhysicsScale);held=false;}ReleaseMouseCapture();};
+        MouseLeftButtonUp+=(_,_)=>{if(held){(vx,vy)=throwTracker.Release(Clock,PhysicsScale);held=false;pet.MarkBallInput(released:true,thrown:vx!=0||vy!=0);}ReleaseMouseCapture();};
         LostMouseCapture+=(_,_)=>{if(held){held=false;vx=vy=0;}};
         MouseRightButtonUp+=(_,_)=>Close();
     }

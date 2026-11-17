@@ -23,7 +23,7 @@
 $ErrorActionPreference = 'Stop'
 $runtime = Join-Path $PSScriptRoot '.mia-runtime'
 $installHome = Join-Path $runtime 'hermes'
-$exe = Join-Path $PSScriptRoot 'dist/MIA-3.2-win-x64/MIA.exe'
+$exe = Join-Path $PSScriptRoot 'dist/MIA-3.3-win-x64/MIA.exe'
 $service = $null
 $launchLock = $null
 $legacyLock = $null
@@ -351,7 +351,7 @@ try {
     if ($progressPath) { [IO.File]::WriteAllText($progressPath + '.ready', 'failed') }
     if ($ShowLaunchError) {
         Add-Type -AssemblyName PresentationFramework
-        $null = [Windows.MessageBox]::Show($_.Exception.Message, 'MIA 3.2')
+        $null = [Windows.MessageBox]::Show($_.Exception.Message, 'MIA 3.3')
     }
     throw
 } finally {

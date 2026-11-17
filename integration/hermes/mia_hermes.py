@@ -24,8 +24,10 @@ from hermes_cli.main import main
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["mia-reset-memory"]:
+        from mia_discord_reset import reset_discord_memory
         from mia_shared_memory import install_from_environment, reset_current
         install_from_environment()
+        reset_discord_memory()
         reset_current()
     elif sys.argv[1:] == ["mia-configure-calendar"]:
         from pathlib import Path

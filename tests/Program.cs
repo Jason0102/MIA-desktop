@@ -13,6 +13,8 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 4 && args[0] == "--interaction-interop")
+            return InteractionInterop.Run(args[1], args[2], args[3]);
         if (args.Length == 2 && args[0] == "--preview-audio") return PreviewAudio.RunAsync(args[1]).GetAwaiter().GetResult();
         if (args.Contains("--setup-voice")) return VoiceSetup.RunAsync().GetAwaiter().GetResult();
         if (args.Contains("--live")) return LiveProbe.RunAsync().GetAwaiter().GetResult();
@@ -25,6 +27,7 @@ internal static class Program
             Check(UserIdentity.Context("desktop", "local").Contains("local-jason"), "desktop resolves Jason identity");
             Check(!UserIdentity.Context("discord", "local").Contains("local-jason"), "unbound Discord does not inherit desktop identity");
             DiscordWorkChecks.Run(scratch, Check);
+            InteractionDashboardChecks.Run(scratch, Check);
             foreach (string name in new[] { "附件.docx", "資料.csv", "未知.custom", "無副檔名", "program.exe" })
             {
                 string path = Path.Combine(scratch, name);
@@ -101,6 +104,7 @@ internal static class Program
             StreamingMemoryChecks.RunAsync().GetAwaiter().GetResult();
             ServiceChecks.RunAsync().GetAwaiter().GetResult();
             HermesChecks.RunAsync(Check).GetAwaiter().GetResult();
+            InteractionMoodChecks.Run(Check);
             MemoryContinuityChecks.Run(Check);
             Console.WriteLine($"PASS: {passed} checks. No live API calls or desktop captures were made.");
             return 0;
