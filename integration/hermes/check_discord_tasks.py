@@ -136,6 +136,27 @@ async def check():
         explicit.text = '新任務：independent work'
         await BasePlatformAdapter.handle_message(adapter, explicit)
         assert entered[-1][1] != entered[0][1]
+        mirror.update(first, Status='interrupted')
+        assert recent_conversation(state, first.source, 'retry') == 'mia-task-111', 'Gateway restart must retain context for a retry'
+        discard = event('777')
+        discard.text = '/discard'
+        await BasePlatformAdapter.handle_message(adapter, discard)
+        assert entered[-1][1] == entered[0][1], 'Recovery command must target the current conversation'
+        snapshots = [json.loads(p.read_text(encoding='utf-8')) for p in (state / 'discord-work').glob('*.json')]
+        assert next(s for s in snapshots if s['Task'] == 'mia-task-111')['Status'] == 'interrupted', 'A recovery command alone is not a queued task'
+        paused = event('888', reply='111')
+        await BasePlatformAdapter.handle_message(adapter, paused)
+        before_results = sum(item['Kind'] == 'message_result' for item in InteractionMemory(state, 'jason').read())
+        await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_start', paused)
+        await BasePlatformAdapter._extract_response_content(adapter,
+            '⏸️ This conversation is paused: a previous turn did not finish when Hermes restarted, and only you know whether to send it again.', paused, entered[-1][1])
+        assert '前文' in extracted_inputs[-1] and '/discard' in extracted_inputs[-1]
+        await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_complete', paused, ProcessingOutcome.SUCCESS)
+        assert sum(item['Kind'] == 'message_result' for item in InteractionMemory(state, 'jason').read()) == before_results, 'Paused notice is not a completed turn'
+        await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_start', paused)
+        await BasePlatformAdapter._extract_response_content(adapter, 'Friday, Guangfu<!--mia-kind:task-->', paused, entered[-1][1])
+        await BasePlatformAdapter._run_processing_hook(adapter, 'on_processing_complete', paused, ProcessingOutcome.SUCCESS)
+        assert sum(item['Kind'] == 'message_result' for item in InteractionMemory(state, 'jason').read()) == before_results + 1
         assert recent_conversation(state, event('x', user='234567890123456789').source, 'next') is None
         other_channel = event('x').source
         other_channel.chat_id = 'different'

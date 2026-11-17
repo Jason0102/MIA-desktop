@@ -47,9 +47,12 @@ def install(home, interactions=None):
 
     async def hook(adapter, name, *args, **kwargs):
         if args and name == 'on_processing_start':
+            args[0]._mia_paused = False
             mirror.update(args[0], Status='running', Reply='', Files=[],
                           StartedAt=datetime.now(timezone.utc).isoformat())
         elif len(args) > 1 and name == 'on_processing_complete':
+            if getattr(args[0], '_mia_paused', False):
+                return await original_hook(adapter, name, *args, **kwargs)
             outcome = args[1].name.lower()
             result = {'success': 'completed', 'failure': 'failed', 'cancelled': 'cancelled'}.get(outcome, 'failed')
             mirror.update(args[0], Status=result)
@@ -59,6 +62,12 @@ def install(home, interactions=None):
 
     async def extract(adapter, response, event, *args, **kwargs):
         if event.source.platform.value == 'discord' and isinstance(response, str):
+            if response.startswith('⏸️ This conversation is paused:') and 'previous turn did not finish' in response:
+                event._mia_paused = True
+                mirror.update(event, Status='interrupted')
+                response = ('上一回合在米亞重啟時中斷，目前暫停處理，以免重複執行。你的新訊息已保存。'
+                            '請回覆這則訊息並傳送 /discard，略過中斷回合、保留前文並繼續已排隊的訊息；'
+                            '此指令不會重跑中斷的工作。')
             kinds = re.findall(r'<!--mia-kind:(chat|task)-->', response)
             if kinds:
                 mirror.update(event, Kind=kinds[-1])

@@ -1,6 +1,6 @@
 """Independent Discord DM jobs on the same Hermes turn engine used by PC jobs.
 
-Unquoted messages continue a recent completed conversation. Discord Reply
+Unquoted messages continue a recent completed or interrupted conversation. Discord Reply
 selects an explicit task; new-task prefixes and concurrent jobs stay separate.
 The durable route index is keyed by sender and channel, never by message text.
 """
@@ -15,7 +15,7 @@ from contextlib import closing
 
 
 def recent_conversation(state, source, text):
-    """Continue the latest finished turn for this sender, leaving concurrent jobs independent."""
+    """Continue the latest inactive turn for this sender, leaving concurrent jobs independent."""
     if re.match(r"^\s*(?:新任務|另外一個任務|另開任務|new task)\s*[:：]", text or "", re.I):
         return None
     candidates = []
@@ -32,7 +32,7 @@ def recent_conversation(state, source, text):
     if not candidates:
         return None
     latest = max(candidates, key=lambda pair: pair[0])[1]
-    return latest.get('Task') if latest.get('Status') == 'completed' else None
+    return latest.get('Task') if latest.get('Status') in ('completed', 'interrupted') else None
 
 
 def install():
@@ -107,12 +107,12 @@ def install():
                              (source.chat_id, source.user_id, reply or event.message_id)).fetchone()
             task = row[0] if row else 'mia-task-' + event.message_id
             continued = False
-            if not row and not reply and not event.get_command():
+            if not row and not reply and event.get_command() in (None, 'discard'):
                 previous = recent_conversation(database.parent, source, event.text)
                 if previous:
                     task = previous
                     continued = True
-            if (event.get_command() or reply) and not row:
+            if (event.get_command() or reply) and not row and not (continued and event.get_command() == 'discard'):
                 # Unknown reply targets must not silently become unrelated tasks.
                 await adapter.send(source.chat_id, '請用 Discord「回覆」選取要操作的任務，再傳送指令。', reply_to=event.message_id)
                 return
@@ -124,7 +124,7 @@ def install():
             await adapter.send(source.chat_id, '目前無法接收此訊息，請稍後再試。', reply_to=event.message_id)
             return
         try:
-            if not row:
+            if not row and not command:
                 mirror.update(event, Status='queued')
             return await original_handle(adapter, event)
         finally:
